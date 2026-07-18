@@ -9,7 +9,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Sidenav />
         <main className="min-w-0">{children}</main>
         <aside>
-          <div className="rounded-[14px] border border-(--color-border) bg-(--color-surface) p-4 text-(--color-text-muted) shadow-[0_1px_2px_rgba(31,35,40,0.06)]">
+          <div className="rounded-[14px] border border-(--color-border) bg-(--color-surface) p-4 text-(--color-text-muted) shadow-(--shadow-card)">
             <div className="pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase">
               Context
             </div>

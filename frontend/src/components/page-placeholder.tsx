@@ -15,7 +15,7 @@ export function PagePlaceholder({
         <h1 className="text-lg font-semibold tracking-[-0.01em]">{title}</h1>
         <span className="text-(--color-text-muted)">{hint}</span>
       </div>
-      <div className="flex flex-col items-center gap-1.5 rounded-[14px] border border-(--color-border) bg-(--color-surface) px-6 py-16 text-center shadow-[0_1px_2px_rgba(31,35,40,0.06)]">
+      <div className="flex flex-col items-center gap-1.5 rounded-[14px] border border-(--color-border) bg-(--color-surface) px-6 py-16 text-center shadow-(--shadow-card)">
         <div className="text-sm font-medium">{emptyTitle}</div>
         <div className="max-w-md text-(--color-text-muted)">{emptyBody}</div>
       </div>
