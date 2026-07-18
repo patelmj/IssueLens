@@ -1,0 +1,37 @@
+import { expect, test } from "@playwright/test";
+
+const ROUTES = [
+  { link: "Overview", href: "/", h1: "Overview" },
+  { link: "Triage", href: "/triage", h1: "Triage" },
+  { link: "Plan", href: "/plan", h1: "Plan" },
+  { link: "Analyze", href: "/analyze", h1: "Analyze" },
+  { link: "Saved Views", href: "/views", h1: "Saved Views" },
+  { link: "Repositories", href: "/repositories", h1: "Repositories" },
+];
+
+test("shell renders in dark mode by default", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-mode", "dark");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Overview");
+});
+
+test("all sidebar routes navigate", async ({ page }) => {
+  await page.goto("/");
+  for (const { link, href, h1 } of ROUTES) {
+    await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: link }).click();
+    await expect(page).toHaveURL(href);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(h1);
+  }
+});
+
+test("theme toggle flips data-mode and persists across reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /switch to light mode/i }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
+  await page.getByRole("button", { name: /switch to dark mode/i }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-mode", "dark");
+});
