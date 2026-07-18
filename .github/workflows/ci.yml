@@ -21,7 +21,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U issuelens"
+          --health-cmd "pg_isready -U issuelens -d issuelens"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync
+      - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run alembic upgrade head
       - run: nohup uv run arq worker.WorkerSettings > /tmp/worker.log 2>&1 &

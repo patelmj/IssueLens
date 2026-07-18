@@ -9,17 +9,22 @@ async function proxy(
   const { path } = await params;
   const url = new URL(req.url);
   const target = `${BACKEND_URL}/${path.join("/")}${url.search}`;
-  const res = await fetch(target, {
-    method: req.method,
-    headers: {
-      "content-type": req.headers.get("content-type") ?? "application/json",
-    },
-    body:
-      req.method === "GET" || req.method === "HEAD"
-        ? undefined
-        : await req.arrayBuffer(),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(target, {
+      method: req.method,
+      headers: {
+        "content-type": req.headers.get("content-type") ?? "application/json",
+      },
+      body:
+        req.method === "GET" || req.method === "HEAD"
+          ? undefined
+          : await req.arrayBuffer(),
+      cache: "no-store",
+    });
+  } catch {
+    return Response.json({ detail: "Backend unreachable" }, { status: 502 });
+  }
   return new Response(res.body, {
     status: res.status,
     headers: {
