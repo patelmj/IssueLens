@@ -6,12 +6,12 @@ Product spec: `issuelens_github_issue_dashboard_spec.md`.
 ## Quickstart
 
 ```sh
-docker compose up --build        # postgres+pgvector, redis, backend :8000, worker, frontend :3000
+docker compose up --build        # postgres+pgvector, redis, backend :8000, worker, frontend :3005
 ```
 
 Then run migrations once: `cd backend && uv run alembic upgrade head`
 
-- Dashboard: http://localhost:3000
+- Dashboard: http://localhost:3005
 - API health: http://localhost:8000/healthz
 
 ## Development loop
