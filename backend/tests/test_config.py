@@ -11,3 +11,18 @@ def test_settings_have_defaults():
     s = get_settings()
     assert s.database_url.startswith("postgresql+asyncpg://")
     assert s.redis_url.startswith("redis://")
+
+
+def test_github_app_settings_default_none():
+    s = get_settings()
+    assert s.github_app_id is None
+    assert s.github_app_private_key_b64 is None
+
+
+def test_github_app_settings_read_env(monkeypatch):
+    monkeypatch.setenv("ISSUELENS_GITHUB_APP_ID", "12345")
+    monkeypatch.setenv("ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64", "cGVt")
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.github_app_id == "12345"
+    assert s.github_app_private_key_b64 == "cGVt"
