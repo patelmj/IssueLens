@@ -41,5 +41,18 @@ services:
       redis:
         condition: service_healthy
 
+  worker:
+    build: ./backend
+    command: ["uv", "run", "arq", "worker.WorkerSettings"]
+    environment:
+      ISSUELENS_DATABASE_URL: postgresql+asyncpg://issuelens:issuelens@postgres:5432/issuelens
+      ISSUELENS_REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/worker.py:/app/worker.py
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
