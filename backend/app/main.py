@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+
+from app.db import get_engine
 
 
 @asynccontextmanager
@@ -19,4 +22,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 @app.get("/healthz")
 async def healthz() -> dict:
-    return {"status": "ok"}
+    database = "ok"
+    try:
+        async with get_engine().connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        database = "unavailable"
+    return {"status": "ok", "database": database}

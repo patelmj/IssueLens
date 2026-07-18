@@ -1,6 +1,7 @@
 import pytest
 
 from app.config import get_settings
+from app.db import get_engine
 
 
 @pytest.fixture(autouse=True)
@@ -12,5 +13,7 @@ def pin_env(monkeypatch):
     )
     monkeypatch.setenv("ISSUELENS_REDIS_URL", "redis://localhost:6379/0")
     get_settings.cache_clear()
+    get_engine.cache_clear()
     yield
     get_settings.cache_clear()
+    get_engine.cache_clear()
