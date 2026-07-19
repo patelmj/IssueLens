@@ -28,10 +28,18 @@ test("theme toggle flips data-mode and persists across reload", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /switch to light mode/i }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
+  await expect(async () => {
+    await page.getByRole("button", { name: /switch to light mode/i }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-mode", "light", {
+      timeout: 1_000,
+    });
+  }).toPass();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-mode", "light");
-  await page.getByRole("button", { name: /switch to dark mode/i }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-mode", "dark");
+  await expect(async () => {
+    await page.getByRole("button", { name: /switch to dark mode/i }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-mode", "dark", {
+      timeout: 1_000,
+    });
+  }).toPass();
 });

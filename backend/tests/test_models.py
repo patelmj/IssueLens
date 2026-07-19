@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
-from app.db import get_sessionmaker
+from app.db import get_engine, get_sessionmaker
 from app.models import Installation, Issue, Repository
 
 TS = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -66,3 +66,17 @@ async def test_delete_repo_cascades_issues(clean_db):
         await session.delete(repo)
         await session.commit()
         assert (await session.execute(select(Issue))).scalar_one_or_none() is None
+
+
+async def test_slice4_indexes_exist():
+    async with get_engine().connect() as conn:
+        rows = await conn.execute(
+            text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'")
+        )
+        names = {row[0] for row in rows}
+    assert {
+        "ix_repositories_installation_id",
+        "ix_sync_jobs_repository_id",
+        "ix_issues_gh_updated_at_not_pr",
+        "ix_issues_state_not_pr",
+    } <= names

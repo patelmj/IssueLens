@@ -41,3 +41,6 @@ class WorkerSettings:
     functions = [ping, sync_repository]
     cron_jobs = [cron(reconcile_all_repositories, name="reconcile_all_repositories", minute={0, 30})]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
+    # keep_result=0: results are never read, and a retained result key would
+    # block re-enqueueing the same _job_id for an hour after each sync
+    keep_result = 0

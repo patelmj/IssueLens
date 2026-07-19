@@ -1,6 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getJson } from "../../lib/api";
+import { relativeTime } from "../../lib/time";
 
 type Repo = {
   id: number;
@@ -11,25 +13,6 @@ type Repo = {
   sync_status: "idle" | "syncing" | "error";
   sync_error: string | null;
 };
-
-async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(body?.detail ?? `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
-}
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return "never";
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
 
 const STATUS_DOT: Record<Repo["sync_status"], string> = {
   idle: "bg-(--color-text-muted)",

@@ -65,13 +65,17 @@ async def test_sync_unknown_repo_404(app_creds, clean_db, api):  # noqa: F811
     assert resp.status_code == 404
 
 
-async def test_sync_enqueues(app_creds, clean_db, api, monkeypatch):  # noqa: F811
+async def test_sync_enqueues_with_dedup_job_id(app_creds, clean_db, api, monkeypatch):  # noqa: F811
     await seed_repo()
     calls: list[tuple] = []
 
+    # NOTE: real arq returns None when the _job_id exists as EITHER an in-flight
+    # job or a retained result key - keep_result=0 in worker.py keeps dedup
+    # scoped to in-flight jobs only. These fakes hand-code that contract.
     class FakePool:
-        async def enqueue_job(self, name, *args):
-            calls.append((name, args))
+        async def enqueue_job(self, name, *args, **kwargs):
+            calls.append((name, args, kwargs))
+            return object()  # arq returns a Job when newly enqueued
 
     async def fake_pool():
         return FakePool()
@@ -81,4 +85,28 @@ async def test_sync_enqueues(app_creds, clean_db, api, monkeypatch):  # noqa: F8
         resp = await client.post("/repositories/500/sync?full=true")
     assert resp.status_code == 202
     assert resp.json() == {"queued": True}
-    assert calls == [("sync_repository", (500, True))]
+    assert calls == [("sync_repository", (500, True), {"_job_id": "sync-repo-500"})]
+
+
+async def test_sync_duplicate_returns_queued_false(app_creds, clean_db, api, monkeypatch):  # noqa: F811
+    await seed_repo()
+
+    class FakePool:
+        async def enqueue_job(self, name, *args, **kwargs):
+            return None  # arq returns None when _job_id already exists
+
+    async def fake_pool():
+        return FakePool()
+
+    monkeypatch.setattr("app.routers.repositories.get_arq_pool", fake_pool)
+    async with api as client:
+        resp = await client.post("/repositories/500/sync")
+    assert resp.status_code == 202
+    assert resp.json() == {"queued": False}
+
+
+async def test_sync_unconfigured_returns_503(clean_db, api):
+    async with api as client:
+        resp = await client.post("/repositories/1/sync")
+    assert resp.status_code == 503
+    assert "GitHub App not configured" in resp.json()["detail"]
