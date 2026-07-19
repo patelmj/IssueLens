@@ -45,6 +45,9 @@ test("issues table renders rows and sorts server-side", async ({ page }) => {
   await expect
     .poll(() => requested.some((u) => u.includes("sort=comments")))
     .toBe(true);
+
+  await page.getByRole("button", { name: /updated/i }).click();
+  await expect(page).toHaveURL(/\/plan$/);
 });
 
 test("empty result shows clear-filters state", async ({ page }) => {

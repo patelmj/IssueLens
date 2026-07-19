@@ -137,9 +137,14 @@ export function PlanClient() {
 
   const toggleSort = (key: SortKey) => {
     if (sort === key) {
-      setParams({ order: order === "desc" ? "asc" : "desc", offset: null });
+      const nextOrder = order === "desc" ? "asc" : "desc";
+      setParams({ order: nextOrder === "desc" ? null : nextOrder, offset: null });
     } else {
-      setParams({ sort: key, order: "desc", offset: null });
+      setParams({
+        sort: key === "updated" ? null : key,
+        order: null,
+        offset: null,
+      });
     }
   };
 
@@ -235,7 +240,7 @@ export function PlanClient() {
                         <a
                           href={`https://github.com/${row.repo_full_name}/issues/${row.number}`}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="block truncate font-medium hover:text-(--color-primary)"
                           title={row.title}
                         >
@@ -253,7 +258,7 @@ export function PlanClient() {
                             >
                               <span
                                 className="inline-block h-1.5 w-1.5 rounded-full"
-                                style={{ background: `#${lb.color || "8888"}` }}
+                                style={{ background: `#${lb.color || "999999"}` }}
                               />
                               {lb.name}
                             </span>
@@ -320,9 +325,10 @@ export function PlanClient() {
               type="button"
               className={btn}
               disabled={data.offset === 0}
-              onClick={() =>
-                setParams({ offset: String(Math.max(0, data.offset - LIMIT)) })
-              }
+              onClick={() => {
+                const prev = data.offset - LIMIT;
+                setParams({ offset: prev > 0 ? String(prev) : null });
+              }}
             >
               ← Prev
             </button>
