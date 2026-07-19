@@ -31,6 +31,9 @@ services:
     environment:
       ISSUELENS_DATABASE_URL: postgresql+asyncpg://issuelens:issuelens@postgres:5432/issuelens
       ISSUELENS_REDIS_URL: redis://redis:6379/0
+      # Forwarded from repo-root .env (compose does not inject .env into containers by itself)
+      ISSUELENS_GITHUB_APP_ID: ${ISSUELENS_GITHUB_APP_ID:-}
+      ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64: ${ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64:-}
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -47,6 +50,9 @@ services:
     environment:
       ISSUELENS_DATABASE_URL: postgresql+asyncpg://issuelens:issuelens@postgres:5432/issuelens
       ISSUELENS_REDIS_URL: redis://redis:6379/0
+      # Forwarded from repo-root .env (compose does not inject .env into containers by itself)
+      ISSUELENS_GITHUB_APP_ID: ${ISSUELENS_GITHUB_APP_ID:-}
+      ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64: ${ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64:-}
     volumes:
       - ./backend/app:/app/app
       - ./backend/worker.py:/app/worker.py

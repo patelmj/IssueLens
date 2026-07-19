@@ -14,6 +14,28 @@ Then run migrations once: `cd backend && uv run alembic upgrade head`
 - Dashboard: http://localhost:3005
 - API health: http://localhost:8000/healthz
 
+## GitHub App setup (one-time)
+
+IssueLens authenticates as a GitHub App (no PATs). ~5 minutes:
+
+1. GitHub → Settings → Developer settings → GitHub Apps → **New GitHub App**
+2. Name: `issuelens-local` (any unique name). Homepage URL: `http://localhost:3005`
+3. **Webhook: uncheck "Active"** (polling only for now)
+4. Permissions → Repository: **Issues: Read-only**, **Metadata: Read-only**
+5. Create the app, note the **App ID**, then **Generate a private key** (.pem downloads)
+6. Install the App on the repositories you want to sync
+7. In repo-root `.env` (never committed):
+
+   ```sh
+   ISSUELENS_GITHUB_APP_ID=<your app id>
+   ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64=<base64 of the .pem file contents>
+   ```
+
+   PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("path\to\key.pem"))`
+8. `docker compose up -d --build backend worker`, open http://localhost:3005/repositories,
+   click **Refresh from GitHub**, then **Sync** on a repo. Issues land in Postgres;
+   a reconciliation job re-syncs every 30 minutes.
+
 ## Development loop
 
 The Dockerized frontend dev server does NOT reliably hot-reload host file edits on
