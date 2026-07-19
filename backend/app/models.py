@@ -5,10 +5,12 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -36,7 +38,7 @@ class Repository(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     installation_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("installations.id", ondelete="CASCADE")
+        BigInteger, ForeignKey("installations.id", ondelete="CASCADE"), index=True
     )
     full_name: Mapped[str] = mapped_column(Text)
     owner: Mapped[str] = mapped_column(Text)
@@ -54,6 +56,16 @@ class Issue(Base):
     __tablename__ = "issues"
     __table_args__ = (
         UniqueConstraint("repository_id", "number", name="uq_issues_repo_number"),
+        Index(
+            "ix_issues_gh_updated_at_not_pr",
+            "gh_updated_at",
+            postgresql_where=text("NOT is_pull_request"),
+        ),
+        Index(
+            "ix_issues_state_not_pr",
+            "state",
+            postgresql_where=text("NOT is_pull_request"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -85,7 +97,7 @@ class SyncJob(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     repository_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("repositories.id", ondelete="CASCADE")
+        BigInteger, ForeignKey("repositories.id", ondelete="CASCADE"), index=True
     )
     kind: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, default="running")
