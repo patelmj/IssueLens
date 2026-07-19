@@ -149,8 +149,9 @@ Replaces `PagePlaceholder`. Layout inside the existing shell:
   (14px radius, `--shadow-card`), value in large type, label in tiny uppercase muted —
   per sketch-findings direction and the `dataviz` skill (loaded before implementation).
 - **Activity card:** "Opened vs closed — last 30 days". Hand-rolled SVG (no chart
-  library): two series, direct ink labels (no floating legend), tokens-only colors,
-  theme-aware in light and dark.
+  library): two series with a legend row plus direct ink end-labels (the dataviz
+  skill mandates a legend for ≥2 series; direct labels come on top of it, not
+  instead of it), tokens-only colors, theme-aware in light and dark.
 - **Repos strip:** the `top_repos` list linking to `/repositories` and to each repo's
   filtered `/plan?repo_id=` view.
 - **Empty state** (zero repos): keeps the card visible with "Connect GitHub to see your
