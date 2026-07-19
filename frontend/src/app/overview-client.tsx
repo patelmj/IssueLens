@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { getJson } from "../lib/api";
 import { relativeTime } from "../lib/time";
-
-export type ActivityDay = { date: string; opened: number; closed: number };
+import { ActivityChart, type ActivityDay } from "../components/activity-chart";
 
 type TopRepo = { id: number; full_name: string; open_issues_count: number };
 
@@ -83,6 +82,13 @@ export function OverviewClient() {
               value={top ? top.full_name.split("/")[1] : "—"}
               sub={top ? `${top.open_issues_count} open issues` : undefined}
             />
+          </div>
+          <div className={`${card} px-4 py-3`}>
+            <div className="flex items-baseline justify-between pb-1">
+              <span className="text-sm font-medium">Opened vs closed</span>
+              <span className="text-(--color-text-muted)">last 30 days</span>
+            </div>
+            <ActivityChart data={data.activity} />
           </div>
           <div className={`${card} px-4 py-3`}>
             <div className="flex items-baseline justify-between pb-2">

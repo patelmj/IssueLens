@@ -8,7 +8,18 @@ const stats = {
     { id: 1, full_name: "patelmj/mehova", open_issues_count: 80 },
     { id: 2, full_name: "patelmj/IssueLens", open_issues_count: 14 },
   ],
-  activity: [],
+  activity: [
+    {
+      date: new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10),
+      opened: 3,
+      closed: 1,
+    },
+    {
+      date: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+      opened: 0,
+      closed: 2,
+    },
+  ],
 };
 
 test("overview renders live stat tiles", async ({ page }) => {
@@ -20,6 +31,9 @@ test("overview renders live stat tiles", async ({ page }) => {
   await expect(page.getByText("94")).toBeVisible();
   await expect(page.getByText("patelmj/mehova")).toBeVisible();
   await expect(page.getByText("5m ago")).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /issues opened and closed per day/i }),
+  ).toBeVisible();
 });
 
 test("overview empty state points at repositories", async ({ page }) => {
