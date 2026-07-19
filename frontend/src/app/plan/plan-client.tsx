@@ -1,10 +1,12 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { getJson } from "../../lib/api";
 import { relativeTime } from "../../lib/time";
+import { Toolbar } from "./toolbar";
 
 export type IssueRow = {
   id: number;
@@ -130,10 +132,23 @@ export function PlanClient() {
     placeholderData: keepPreviousData,
   });
 
-  // Task 9 adds the setter + toolbar; destructuring only `visible` keeps lint clean here
-  const [visible] = useState<Set<ColumnKey>>(
+  const { data: repos } = useQuery({
+    queryKey: ["repositories"],
+    queryFn: () => getJson<{ id: number; full_name: string }[]>("/api/backend/repositories"),
+  });
+
+  const [visible, setVisible] = useState<Set<ColumnKey>>(
     () => new Set(COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)),
   );
+
+  const onToggleColumn = (key: ColumnKey) => {
+    setVisible((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const toggleSort = (key: SortKey) => {
     if (sort === key) {
@@ -159,7 +174,11 @@ export function PlanClient() {
         </span>
       </div>
 
-      {/* Toolbar mounts here in the next task */}
+      <Toolbar
+        params={{ repoId, state, label, assignee, q, setParams }}
+        visible={visible}
+        onToggleColumn={onToggleColumn}
+      />
 
       {isPending ? (
         <div className={`${card} px-6 py-16 text-center text-(--color-text-muted)`}>
@@ -169,6 +188,20 @@ export function PlanClient() {
         <div className={`${card} px-6 py-16 text-center`}>
           <div className="text-sm font-medium">Backend unavailable</div>
           <div className="pt-1.5 text-(--color-text-muted)">{error.message}</div>
+        </div>
+      ) : repos && repos.length === 0 ? (
+        <div className={`${card} flex flex-col items-center gap-1.5 px-6 py-16 text-center`}>
+          <div className="text-sm font-medium">No repositories connected</div>
+          <div className="max-w-md text-(--color-text-muted)">
+            Install the IssueLens GitHub App and sync a repository to fill this
+            table with real issues.
+          </div>
+          <Link
+            className="pt-2 text-(--color-primary) hover:underline"
+            href="/repositories"
+          >
+            Go to Repositories →
+          </Link>
         </div>
       ) : !data || data.total === 0 ? (
         <div className={`${card} flex flex-col items-center gap-1.5 px-6 py-16 text-center`}>

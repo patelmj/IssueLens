@@ -59,3 +59,64 @@ test("empty result shows clear-filters state", async ({ page }) => {
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(page).toHaveURL(/\/plan$/);
 });
+
+const facets = {
+  labels: [
+    { name: "bug", color: "d73a4a" },
+    { name: "feature", color: "a2eeef" },
+  ],
+  assignees: ["patelmj"],
+};
+
+const repos = [
+  { id: 500, full_name: "patelmj/mehova" },
+  { id: 501, full_name: "patelmj/IssueLens" },
+];
+
+test("toolbar filters round-trip to the API and the URL", async ({ page }) => {
+  const requested: string[] = [];
+  await page.route(/\/api\/backend\/issues\/facets/, (route) =>
+    route.fulfill({ json: facets }),
+  );
+  await page.route(/\/api\/backend\/repositories$/, (route) =>
+    route.fulfill({ json: repos }),
+  );
+  await page.route(/\/api\/backend\/issues\?/, (route) => {
+    requested.push(route.request().url());
+    return route.fulfill({ json: page1 });
+  });
+  await page.goto("/plan");
+  await expect(page.getByText("Fix token refresh")).toBeVisible();
+
+  await page.getByRole("button", { name: "Closed" }).click();
+  await expect(page).toHaveURL(/state=closed/);
+  await expect
+    .poll(() => requested.some((u) => u.includes("state=closed")))
+    .toBe(true);
+
+  await page.getByLabel("Label", { exact: true }).selectOption("bug");
+  await expect(page).toHaveURL(/label=bug/);
+
+  await page.getByLabel("Search issues").fill("token");
+  await expect(page).toHaveURL(/q=token/, { timeout: 2_000 });
+
+  await page.getByText("Columns").click();
+  await page.getByLabel("Milestone").check();
+  await expect(
+    page.getByRole("columnheader", { name: "Milestone" }),
+  ).toBeVisible();
+});
+
+test("no connected repositories shows connect empty state", async ({ page }) => {
+  await page.route(/\/api\/backend\/issues\/facets/, (route) =>
+    route.fulfill({ json: { labels: [], assignees: [] } }),
+  );
+  await page.route(/\/api\/backend\/repositories$/, (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route(/\/api\/backend\/issues\?/, (route) =>
+    route.fulfill({ json: { items: [], total: 0, limit: 50, offset: 0 } }),
+  );
+  await page.goto("/plan");
+  await expect(page.getByText("No repositories connected")).toBeVisible();
+});
