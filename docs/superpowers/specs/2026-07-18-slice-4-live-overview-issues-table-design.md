@@ -133,9 +133,12 @@ toolbar's label/assignee dropdowns so they always reflect real data.
 
 ### 2.4 Sync dedup (intake)
 
-`_job_id=f"sync-repo-{repo_id}"` on **both** enqueue paths — the
-`POST /repositories/{id}/sync` endpoint and the reconciliation cron — so concurrent
-syncs of the same repo dedup in ARQ.
+`_job_id=f"sync-repo-{repo_id}"` on the `POST /repositories/{id}/sync` enqueue, so
+repeated clicks/concurrent requests dedup in ARQ (enqueue returns `None` when the job
+already exists → the endpoint reports `{"queued": false}`). Note: the reconciliation
+cron does **not** enqueue — it calls the sync function inline inside the worker — so
+the endpoint is the only enqueue path. (Corrected during planning; the original
+design assumed two enqueue paths.)
 
 ## 3. Frontend: Overview (`/`)
 
@@ -213,7 +216,7 @@ slice delivers value even if interrupted. Pause before any PR/merge decision.
 ## 8. Deferred-findings intake checklist (this slice)
 
 - [ ] FK indexes on `repositories.installation_id`, `sync_jobs.repository_id` (§2.3)
-- [ ] `_job_id` sync dedup on both enqueue paths (§2.4)
+- [ ] `_job_id` sync dedup on the endpoint enqueue (§2.4)
 - [ ] Test: 503-unconfigured on sync endpoint (§6)
 - [ ] Test: `since` sent on second sync (§6)
 - [ ] e2e: "Connect GitHub" empty-state assertion (§6)
