@@ -132,9 +132,10 @@ export function PlanClient() {
     placeholderData: keepPreviousData,
   });
 
-  const { data: repos } = useQuery({
+  const { data: repos, isPending: reposPending } = useQuery({
     queryKey: ["repositories"],
-    queryFn: () => getJson<{ id: number; full_name: string }[]>("/api/backend/repositories"),
+    queryFn: () =>
+      getJson<{ id: number; full_name: string }[]>("/api/backend/repositories"),
   });
 
   const [visible, setVisible] = useState<Set<ColumnKey>>(
@@ -180,7 +181,7 @@ export function PlanClient() {
         onToggleColumn={onToggleColumn}
       />
 
-      {isPending ? (
+      {isPending || reposPending ? (
         <div className={`${card} px-6 py-16 text-center text-(--color-text-muted)`}>
           Loading issues…
         </div>

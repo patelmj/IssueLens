@@ -96,9 +96,15 @@ test("toolbar filters round-trip to the API and the URL", async ({ page }) => {
 
   await page.getByLabel("Label", { exact: true }).selectOption("bug");
   await expect(page).toHaveURL(/label=bug/);
+  await expect
+    .poll(() => requested.some((u) => u.includes("label=bug")))
+    .toBe(true);
 
   await page.getByLabel("Search issues").fill("token");
   await expect(page).toHaveURL(/q=token/, { timeout: 2_000 });
+  await expect
+    .poll(() => requested.some((u) => u.includes("q=token")))
+    .toBe(true);
 
   await page.getByText("Columns").click();
   await page.getByLabel("Milestone").check();
