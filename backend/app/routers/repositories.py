@@ -73,5 +73,7 @@ async def trigger_sync(
     if repo is None:
         raise HTTPException(status_code=404, detail="Repository not found")
     pool = await get_arq_pool()
-    await pool.enqueue_job("sync_repository", repo_id, full)
-    return {"queued": True}
+    job = await pool.enqueue_job(
+        "sync_repository", repo_id, full, _job_id=f"sync-repo-{repo_id}"
+    )
+    return {"queued": job is not None}

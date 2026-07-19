@@ -147,3 +147,21 @@ async def test_sync_error_path(app_creds, clean_db):  # noqa: F811
         assert repo.sync_error
         job = (await session.execute(select(SyncJob))).scalar_one()
         assert job.status == "error"
+
+
+@respx.mock
+async def test_incremental_sync_sends_since(app_creds, clean_db):  # noqa: F811
+    _token_route()
+    route = respx.get("https://api.github.com/repos/patelmj/IssueLens/issues").mock(
+        return_value=httpx.Response(200, json=[gh_issue(1, 1)])
+    )
+    async with get_sessionmaker()() as session:
+        await seed(session)
+        async with make_http_client() as client:
+            await sync_repository_issues(session, client, 500)
+            await sync_repository_issues(session, client, 500)
+    first_params = dict(route.calls[0].request.url.params)
+    assert "since" not in first_params
+    second_params = dict(route.calls[-1].request.url.params)
+    # last_synced_at after run 1 = gh_issue updated (2026-07-10T10:00Z) minus 5-min overlap
+    assert second_params["since"] == "2026-07-10T09:55:00Z"
