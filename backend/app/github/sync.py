@@ -20,6 +20,10 @@ def _parse_ts(value: str | None) -> datetime | None:
 
 async def refresh_installations(session: AsyncSession, client: httpx.AsyncClient) -> int:
     installations = await app_get(client, "/app/installations")
+    if not installations:
+        # A successful-but-empty response (App uninstalled everywhere, suspension, or a
+        # transient GitHub anomaly) must not silently wipe local data: skip the prune.
+        return 0
     seen_inst_ids: list[int] = []
     seen_repo_ids: list[int] = []
     for inst in installations:
@@ -107,6 +111,10 @@ async def sync_repository_issues(
         if repo.last_synced_at and not full:
             since = repo.last_synced_at - SINCE_OVERLAP
             params["since"] = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Known limitation: with sort=updated pagination, an issue updated mid-fetch can
+        # shift page boundaries so an unchanged item is skipped; its updated_at stays old,
+        # so incremental runs won't recover it. A full=True sync repairs this; webhook
+        # delivery (next slice) removes the window entirely.
         raw_issues = await installation_get_paginated(
             client, repo.installation_id, f"/repos/{repo.full_name}/issues", params=params
         )

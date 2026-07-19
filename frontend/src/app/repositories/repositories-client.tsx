@@ -60,8 +60,11 @@ export function RepositoriesClient() {
       getJson<{ queued: boolean }>(`/api/backend/repositories/${id}/sync`, {
         method: "POST",
       }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["repositories"] }),
+    onSuccess: (_data, id) => {
+      queryClient.setQueryData<Repo[]>(["repositories"], (old) =>
+        old?.map((r) => (r.id === id ? { ...r, sync_status: "syncing" } : r)),
+      );
+    },
   });
 
   return (

@@ -117,6 +117,21 @@ async def test_sync_idempotent_and_pr_flagging(app_creds, clean_db):  # noqa: F8
 
 
 @respx.mock
+async def test_refresh_empty_list_skips_prune(app_creds, clean_db):  # noqa: F811
+    _token_route()
+    respx.get("https://api.github.com/app/installations").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    async with get_sessionmaker()() as session:
+        await seed(session)
+        async with make_http_client() as client:
+            count = await refresh_installations(session, client)
+        assert count == 0
+        repos = list((await session.execute(select(Repository))).scalars())
+        assert [r.id for r in repos] == [500]  # nothing wiped
+
+
+@respx.mock
 async def test_sync_error_path(app_creds, clean_db):  # noqa: F811
     _token_route()
     respx.get("https://api.github.com/repos/patelmj/IssueLens/issues").mock(
