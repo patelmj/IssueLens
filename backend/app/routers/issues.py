@@ -3,7 +3,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -112,3 +112,48 @@ async def list_issues(
         for issue, full_name in rows
     ]
     return IssuePage(items=items, total=total, limit=limit, offset=offset)
+
+
+class LabelFacet(BaseModel):
+    name: str
+    color: str
+
+
+class FacetsOut(BaseModel):
+    labels: list[LabelFacet]
+    assignees: list[str]
+
+
+@router.get("/facets", response_model=FacetsOut)
+async def issue_facets(
+    session: AsyncSession = Depends(get_session),
+    repo_id: int | None = None,
+) -> FacetsOut:
+    repo_clause = "AND repository_id = :repo_id" if repo_id is not None else ""
+    params = {"repo_id": repo_id} if repo_id is not None else {}
+    label_rows = (
+        await session.execute(
+            text(
+                "SELECT elem->>'name' AS name, min(elem->>'color') AS color "
+                "FROM issues, jsonb_array_elements(labels) AS elem "
+                f"WHERE NOT is_pull_request {repo_clause} "
+                "GROUP BY elem->>'name' ORDER BY elem->>'name'"
+            ),
+            params,
+        )
+    ).all()
+    assignee_rows = (
+        await session.execute(
+            text(
+                "SELECT DISTINCT elem AS login "
+                "FROM issues, jsonb_array_elements_text(assignees) AS elem "
+                f"WHERE NOT is_pull_request {repo_clause} "
+                "ORDER BY elem"
+            ),
+            params,
+        )
+    ).all()
+    return FacetsOut(
+        labels=[LabelFacet(name=row.name, color=row.color or "") for row in label_rows],
+        assignees=[row.login for row in assignee_rows],
+    )

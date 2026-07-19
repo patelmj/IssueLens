@@ -143,3 +143,19 @@ async def test_bad_params_are_422(clean_db, api):
         assert (await client.get("/issues?sort=bogus")).status_code == 422
         assert (await client.get("/issues?limit=500")).status_code == 422
         assert (await client.get("/issues?offset=-1")).status_code == 422
+
+
+async def test_facets_all_repos(clean_db, api):
+    await seed_issues()
+    body = await get_body(api, "/issues/facets")
+    assert [lb["name"] for lb in body["labels"]] == ["bug", "feature"]
+    assert body["labels"][0]["color"] == "d73a4a"
+    # PR label "prlabel" and PR assignee "ghost" are excluded
+    assert body["assignees"] == ["octocat", "patelmj"]
+
+
+async def test_facets_scoped_to_repo(clean_db, api):
+    await seed_issues()
+    body = await get_body(api, "/issues/facets?repo_id=501")
+    assert [lb["name"] for lb in body["labels"]] == ["bug"]
+    assert body["assignees"] == ["octocat"]
