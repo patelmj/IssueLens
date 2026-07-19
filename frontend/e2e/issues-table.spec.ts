@@ -28,12 +28,23 @@ const page1 = {
   offset: 0,
 };
 
+const repos = [
+  { id: 500, full_name: "patelmj/mehova" },
+  { id: 501, full_name: "patelmj/IssueLens" },
+];
+
 test("issues table renders rows and sorts server-side", async ({ page }) => {
   const requested: string[] = [];
   await page.route(/\/api\/backend\/issues\?/, (route) => {
     requested.push(route.request().url());
     return route.fulfill({ json: page1 });
   });
+  await page.route(/\/api\/backend\/repositories$/, (route) =>
+    route.fulfill({ json: repos }),
+  );
+  await page.route(/\/api\/backend\/issues\/facets/, (route) =>
+    route.fulfill({ json: { labels: [], assignees: [] } }),
+  );
   await page.goto("/plan");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Plan");
   await expect(page.getByText("Fix token refresh")).toBeVisible();
@@ -54,6 +65,12 @@ test("empty result shows clear-filters state", async ({ page }) => {
   await page.route(/\/api\/backend\/issues\?/, (route) =>
     route.fulfill({ json: { items: [], total: 0, limit: 50, offset: 0 } }),
   );
+  await page.route(/\/api\/backend\/repositories$/, (route) =>
+    route.fulfill({ json: repos }),
+  );
+  await page.route(/\/api\/backend\/issues\/facets/, (route) =>
+    route.fulfill({ json: { labels: [], assignees: [] } }),
+  );
   await page.goto("/plan?q=zzz");
   await expect(page.getByText("No issues match these filters")).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
@@ -67,11 +84,6 @@ const facets = {
   ],
   assignees: ["patelmj"],
 };
-
-const repos = [
-  { id: 500, full_name: "patelmj/mehova" },
-  { id: 501, full_name: "patelmj/IssueLens" },
-];
 
 test("toolbar filters round-trip to the API and the URL", async ({ page }) => {
   const requested: string[] = [];

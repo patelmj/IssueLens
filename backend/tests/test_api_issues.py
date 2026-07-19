@@ -129,6 +129,12 @@ async def test_sort_by_comments_desc(clean_db, api):
     assert [i["comments_count"] for i in body["items"]] == [5, 2]
 
 
+async def test_sort_by_number_asc(clean_db, api):
+    await seed_issues()
+    body = await get_body(api, "/issues?state=all&sort=number&order=asc")
+    assert [i["number"] for i in body["items"]] == [1, 1, 2]
+
+
 async def test_pagination(clean_db, api):
     await seed_issues()
     body = await get_body(api, "/issues?limit=1&offset=1")

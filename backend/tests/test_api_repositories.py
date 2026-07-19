@@ -69,6 +69,9 @@ async def test_sync_enqueues_with_dedup_job_id(app_creds, clean_db, api, monkeyp
     await seed_repo()
     calls: list[tuple] = []
 
+    # NOTE: real arq returns None when the _job_id exists as EITHER an in-flight
+    # job or a retained result key - keep_result=0 in worker.py keeps dedup
+    # scoped to in-flight jobs only. These fakes hand-code that contract.
     class FakePool:
         async def enqueue_job(self, name, *args, **kwargs):
             calls.append((name, args, kwargs))

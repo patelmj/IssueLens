@@ -62,14 +62,14 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
     )
     opened_rows = (
         await session.execute(
-            select(cast(Issue.gh_created_at, Date).label("day"), func.count())
+            select(cast(func.timezone("UTC", Issue.gh_created_at), Date).label("day"), func.count())
             .where(Issue.is_pull_request.is_(False), Issue.gh_created_at >= window_start)
             .group_by("day")
         )
     ).all()
     closed_rows = (
         await session.execute(
-            select(cast(Issue.gh_closed_at, Date).label("day"), func.count())
+            select(cast(func.timezone("UTC", Issue.gh_closed_at), Date).label("day"), func.count())
             .where(
                 Issue.is_pull_request.is_(False),
                 Issue.gh_closed_at.is_not(None),
