@@ -11,6 +11,13 @@ docker compose up --build        # postgres+pgvector, redis, backend :8000, work
 
 Then run migrations once: `cd backend && uv run alembic upgrade head`
 
+The first classification run downloads the local LLM (`qwen3:8b`, ~5 GB) into the
+`ollamadata` volume — watch progress with `docker compose logs -f ollama`. Issue
+type/component classification runs automatically after each repo sync.
+On machines without the NVIDIA container runtime, `docker compose up` fails on the
+`ollama` service's GPU reservation — delete the `deploy:` block from the `ollama`
+service in `docker-compose.yml` and it runs on CPU instead.
+
 - Dashboard: http://localhost:3005
 - API health: http://localhost:8000/healthz
 

@@ -28,7 +28,7 @@ test("overview renders live stat tiles", async ({ page }) => {
   );
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Overview");
-  await expect(page.getByText("94")).toBeVisible();
+  await expect(page.getByTestId("overview-content").getByText("94")).toBeVisible();
   await expect(page.getByText("patelmj/mehova")).toBeVisible();
   await expect(page.getByText("5m ago")).toBeVisible();
   await expect(

@@ -5,7 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.db import get_sessionmaker
 from app.main import app
-from app.models import Installation, Issue, Repository
+from app.models import Installation, Issue, IssueClassification, Repository
 
 NOW = datetime.now(timezone.utc)
 
@@ -71,8 +71,7 @@ async def seed_issues():
 
 
 async def get_body(api, url: str) -> dict:
-    async with api as client:
-        resp = await client.get(url)
+    resp = await api.get(url)
     assert resp.status_code == 200
     return resp.json()
 
@@ -165,3 +164,70 @@ async def test_facets_scoped_to_repo(clean_db, api):
     body = await get_body(api, "/issues/facets?repo_id=501")
     assert [lb["name"] for lb in body["labels"]] == ["bug"]
     assert body["assignees"] == ["octocat"]
+
+
+async def seed_classifications():
+    async with get_sessionmaker()() as session:
+        session.add(
+            IssueClassification(
+                issue_id=1, issue_type="bug", component="auth",
+                confidence=0.9, model="test-model",
+                issue_gh_updated_at=NOW - timedelta(days=1),
+            )
+        )
+        session.add(
+            IssueClassification(
+                issue_id=4, issue_type="feature", component="sync",
+                confidence=0.7, model="test-model",
+                issue_gh_updated_at=NOW - timedelta(hours=3),
+            )
+        )
+        await session.commit()
+
+
+async def test_rows_include_classification_fields(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    body = await get_body(api, "/issues?sort=number&order=asc")
+    by_title = {i["title"]: i for i in body["items"]}
+    assert by_title["Alpha bug"]["issue_type"] == "bug"
+    assert by_title["Alpha bug"]["component"] == "auth"
+    assert by_title["Alpha bug"]["classification_confidence"] == 0.9
+    assert by_title["Delta task"]["issue_type"] == "feature"
+
+
+async def test_unclassified_rows_have_null_fields(clean_db, api):
+    await seed_issues()
+    body = await get_body(api, "/issues?state=all&q=beta")
+    row = body["items"][0]
+    assert row["issue_type"] is None
+    assert row["component"] is None
+    assert row["classification_confidence"] is None
+
+
+async def test_type_filter(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    body = await get_body(api, "/issues?type=bug")
+    assert [i["title"] for i in body["items"]] == ["Alpha bug"]
+
+
+async def test_component_filter(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    body = await get_body(api, "/issues?component=sync")
+    assert [i["title"] for i in body["items"]] == ["Delta task"]
+
+
+async def test_bad_type_is_422(clean_db, api):
+    async with api as client:
+        assert (await client.get("/issues?type=epic")).status_code == 422
+
+
+async def test_facets_include_components(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    body = await get_body(api, "/issues/facets")
+    assert body["components"] == ["auth", "sync"]
+    scoped = await get_body(api, "/issues/facets?repo_id=501")
+    assert scoped["components"] == ["sync"]

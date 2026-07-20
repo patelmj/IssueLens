@@ -26,3 +26,11 @@ def test_github_app_settings_read_env(monkeypatch):
     s = get_settings()
     assert s.github_app_id == "12345"
     assert s.github_app_private_key_b64 == "cGVt"
+
+
+def test_ollama_settings_read_from_env():
+    # pin_env (autouse) sets ISSUELENS_OLLAMA_URL / ISSUELENS_OLLAMA_MODEL,
+    # proving the ISSUELENS_ prefix wiring works end to end.
+    settings = get_settings()
+    assert settings.ollama_url == "http://127.0.0.1:11434"
+    assert settings.ollama_model == "test-model"
