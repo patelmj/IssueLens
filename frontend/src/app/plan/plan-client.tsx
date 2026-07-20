@@ -23,6 +23,9 @@ export type IssueRow = {
   gh_created_at: string;
   gh_updated_at: string;
   gh_closed_at: string | null;
+  issue_type: "bug" | "feature" | "debt" | "question" | "docs" | null;
+  component: string | null;
+  classification_confidence: number | null;
 };
 
 export type IssuePage = {
@@ -38,6 +41,8 @@ export type ColumnKey =
   | "repo"
   | "number"
   | "title"
+  | "type"
+  | "component"
   | "labels"
   | "assignees"
   | "comments"
@@ -53,6 +58,8 @@ export type TableParams = {
   label: string | null;
   assignee: string | null;
   q: string | null;
+  type: string | null;
+  component: string | null;
   setParams: (updates: Record<string, string | null>) => void;
 };
 
@@ -65,6 +72,8 @@ export const COLUMNS: {
   { key: "repo", label: "Repo", defaultVisible: true },
   { key: "number", label: "#", sort: "number", defaultVisible: true },
   { key: "title", label: "Title", sort: "title", defaultVisible: true },
+  { key: "type", label: "Type", defaultVisible: true },
+  { key: "component", label: "Component", defaultVisible: true },
   { key: "labels", label: "Labels", defaultVisible: true },
   { key: "assignees", label: "Assignees", defaultVisible: true },
   { key: "comments", label: "Comments", sort: "comments", defaultVisible: true },
@@ -88,6 +97,14 @@ function stateBadge(state: IssueRow["state"]) {
     : "text-(--color-text-muted) border-(--color-border)";
 }
 
+const TYPE_BADGE: Record<string, string> = {
+  bug: "text-(--type-bug) border-(--type-bug)",
+  feature: "text-(--type-feature) border-(--type-feature)",
+  debt: "text-(--type-debt) border-(--type-debt)",
+  question: "text-(--type-question) border-(--type-question)",
+  docs: "text-(--type-docs) border-(--type-docs)",
+};
+
 export function PlanClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -110,6 +127,8 @@ export function PlanClient() {
   const label = searchParams.get("label");
   const assignee = searchParams.get("assignee");
   const q = searchParams.get("q");
+  const typeFilter = searchParams.get("type");
+  const component = searchParams.get("component");
   const sort = (searchParams.get("sort") ?? "updated") as SortKey;
   const order = searchParams.get("order") ?? "desc";
   const offset = Math.max(0, Number(searchParams.get("offset") ?? "0") || 0);
@@ -125,6 +144,8 @@ export function PlanClient() {
   if (label) backendQuery.set("label", label);
   if (assignee) backendQuery.set("assignee", assignee);
   if (q) backendQuery.set("q", q);
+  if (typeFilter) backendQuery.set("type", typeFilter);
+  if (component) backendQuery.set("component", component);
 
   const { data, error, isPending } = useQuery({
     queryKey: ["issues", backendQuery.toString()],
@@ -176,7 +197,16 @@ export function PlanClient() {
       </div>
 
       <Toolbar
-        params={{ repoId, state, label, assignee, q, setParams }}
+        params={{
+          repoId,
+          state,
+          label,
+          assignee,
+          q,
+          type: typeFilter,
+          component,
+          setParams,
+        }}
         visible={visible}
         onToggleColumn={onToggleColumn}
       />
@@ -280,6 +310,32 @@ export function PlanClient() {
                         >
                           {row.title}
                         </a>
+                      </td>
+                    ) : null}
+                    {visible.has("type") ? (
+                      <td className="px-3 py-2" data-testid="type-cell">
+                        {row.issue_type ? (
+                          <span
+                            className={`rounded-full border px-1.5 text-[10px] ${TYPE_BADGE[row.issue_type]}`}
+                            title={
+                              row.classification_confidence != null
+                                ? `Confidence ${Math.round(row.classification_confidence * 100)}%`
+                                : undefined
+                            }
+                          >
+                            {row.issue_type}
+                          </span>
+                        ) : (
+                          <span className="text-(--color-text-muted)">—</span>
+                        )}
+                      </td>
+                    ) : null}
+                    {visible.has("component") ? (
+                      <td
+                        className="px-3 py-2 whitespace-nowrap text-(--color-text-muted)"
+                        data-testid="component-cell"
+                      >
+                        {row.component ?? "—"}
                       </td>
                     ) : null}
                     {visible.has("labels") ? (

@@ -5,7 +5,11 @@ import { useEffect, useState } from "react";
 import { getJson } from "../../lib/api";
 import { COLUMNS, type ColumnKey, type TableParams } from "./plan-client";
 
-type Facets = { labels: { name: string; color: string }[]; assignees: string[] };
+type Facets = {
+  labels: { name: string; color: string }[];
+  assignees: string[];
+  components: string[];
+};
 type Repo = { id: number; full_name: string };
 
 const control =
@@ -17,6 +21,8 @@ const STATES = [
   { value: "all", label: "All" },
 ];
 
+const TYPES = ["bug", "feature", "debt", "question", "docs"];
+
 export function Toolbar({
   params,
   visible,
@@ -26,7 +32,7 @@ export function Toolbar({
   visible: Set<ColumnKey>;
   onToggleColumn: (key: ColumnKey) => void;
 }) {
-  const { repoId, state, label, assignee, q, setParams } = params;
+  const { repoId, state, label, assignee, q, type, component, setParams } = params;
 
   const { data: repos } = useQuery({
     queryKey: ["repositories"],
@@ -66,6 +72,7 @@ export function Toolbar({
             repo_id: e.target.value || null,
             label: null,
             assignee: null,
+            component: null,
             offset: null,
           })
         }
@@ -134,6 +141,36 @@ export function Toolbar({
         ))}
       </select>
 
+      <select
+        aria-label="Type"
+        className={control}
+        value={type ?? ""}
+        onChange={(e) => setParams({ type: e.target.value || null, offset: null })}
+      >
+        <option value="">Any type</option>
+        {TYPES.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+
+      <select
+        aria-label="Component"
+        className={control}
+        value={component ?? ""}
+        onChange={(e) =>
+          setParams({ component: e.target.value || null, offset: null })
+        }
+      >
+        <option value="">Any component</option>
+        {(facets?.components ?? []).map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+
       <div className="grow" />
 
       <details className="relative">
@@ -147,6 +184,11 @@ export function Toolbar({
             <label key={col.key} className="flex items-center gap-2">
               <input
                 type="checkbox"
+                aria-label={
+                  col.key === "type" || col.key === "component"
+                    ? `Show ${col.label} column`
+                    : undefined
+                }
                 checked={visible.has(col.key)}
                 onChange={() => onToggleColumn(col.key)}
               />
