@@ -110,7 +110,7 @@ A separate table (rather than columns on `issues`) means `sync_repository_issues
 
 - Issues list query LEFT JOINs `issue_classifications`; each row gains `issue_type`, `component`, `classification_confidence` (all nullable — null means not yet classified).
 - New filter params: `type` (validated against the 5-value taxonomy) and `component` (exact match, normalized form).
-- New lightweight endpoint `GET /issues/components` returning the distinct non-null components (with counts), honoring the same repo filter param as the issues list — feeds the component filter dropdown.
+- The existing `GET /issues/facets` endpoint (which already serves the label and assignee dropdowns) gains a `components` list — distinct non-null components, honoring the same `repo_id` param — feeding the component filter dropdown. (Amended during planning from a separate `GET /issues/components` endpoint: facets is the established pattern for filter vocabularies.)
 
 **Frontend (issues table + toolbar):**
 
