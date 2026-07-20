@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
 const row = (over: Partial<Record<string, unknown>>) => ({
   id: 1,
@@ -45,13 +45,13 @@ const breakdown = {
   ],
 };
 
-async function stubList(page, requested?: string[]) {
-  await page.route(/\/api\/backend\/repositories$/, (route) => route.fulfill({ json: repos }));
-  await page.route(/\/api\/backend\/issues\/facets/, (route) => route.fulfill({ json: facets }));
-  await page.route(/\/api\/backend\/issues\/\d+\/readiness$/, (route) =>
+async function stubList(page: Page, requested?: string[]) {
+  await page.route(/\/api\/backend\/repositories$/, (route: Route) => route.fulfill({ json: repos }));
+  await page.route(/\/api\/backend\/issues\/facets/, (route: Route) => route.fulfill({ json: facets }));
+  await page.route(/\/api\/backend\/issues\/\d+\/readiness$/, (route: Route) =>
     route.fulfill({ json: breakdown }),
   );
-  await page.route(/\/api\/backend\/issues\?/, (route) => {
+  await page.route(/\/api\/backend\/issues\?/, (route: Route) => {
     requested?.push(route.request().url());
     return route.fulfill({ json: page1 });
   });
