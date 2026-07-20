@@ -149,6 +149,35 @@ class IssueSuggestion(Base):
     )
 
 
+class IssuePriority(Base):
+    __tablename__ = "issue_priority"
+
+    issue_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    urgency: Mapped[int] = mapped_column(Integer)
+    importance: Mapped[int] = mapped_column(Integer)
+    factors: Mapped[list] = mapped_column(JSONB, default=list)
+    model: Mapped[str] = mapped_column(Text)
+    scored_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    issue_gh_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class IssuePriorityPin(Base):
+    __tablename__ = "issue_priority_pins"
+
+    issue_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    pinned_urgency: Mapped[float] = mapped_column(Double)
+    pinned_importance: Mapped[float] = mapped_column(Double)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
 
