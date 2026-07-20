@@ -43,6 +43,15 @@ IssueLens authenticates as a GitHub App (no PATs). ~5 minutes:
    click **Refresh from GitHub**, then **Sync** on a repo. Issues land in Postgres;
    a reconciliation job re-syncs every 30 minutes.
 
+### Triage push requires write permission
+
+The triage inbox can push scaffolded section changes back to an issue's body. This
+needs the GitHub App to hold **Issues: Read & write** (the sync path only needs Read).
+After changing the permission in the App settings, **re-accept the installation** on
+each repository (GitHub emails the owner a permission-update prompt). Until this is
+done, generating suggestions, editing, and saving still work; only **Approve & push**
+fails, with a clear "ensure the App has Issues: write permission" message.
+
 ## Development loop
 
 The Dockerized frontend dev server does NOT reliably hot-reload host file edits on
