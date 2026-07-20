@@ -11,6 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { getJson, sendJson } from "../../../lib/api";
 import { PlanTabs } from "../plan-tabs";
+import { MatrixChart } from "./matrix-chart";
 import {
   toPlotted,
   type MatrixItem,
@@ -89,6 +90,7 @@ export function MatrixClient() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: matrixKey }),
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by Task 11 toast
   const releaseMutation = useMutation({
     mutationFn: (issueId: number) =>
       sendJson<undefined>(`/api/backend/issues/${issueId}/pin`, "DELETE"),
@@ -108,7 +110,6 @@ export function MatrixClient() {
 
   const items = data?.items ?? [];
   const plotted = toPlotted(items);
-  const selected = items.find((item) => item.issue_id === selectedId) ?? null;
 
   return (
     <div className="flex flex-col gap-4" data-testid="matrix-content">
@@ -179,31 +180,16 @@ export function MatrixClient() {
           No scored issues yet — scores appear after the next analysis run.
         </div>
       ) : (
-        <MatrixBoard
+        <MatrixChart
           plotted={plotted}
-          selected={selected}
+          selectedId={selectedId}
           onSelect={setSelectedId}
           onPin={(issueId, urgency, importance) =>
             pinMutation.mutate({ issueId, urgency, importance })
           }
-          onRelease={(issueId) => releaseMutation.mutate(issueId)}
+          onHover={() => {}}
         />
       )}
-    </div>
-  );
-}
-
-/** Placeholder container — replaced by chart + queue in the next two tasks. */
-function MatrixBoard(props: {
-  plotted: ReturnType<typeof toPlotted>;
-  selected: MatrixItem | null;
-  onSelect: (id: number | null) => void;
-  onPin: (issueId: number, urgency: number, importance: number) => void;
-  onRelease: (issueId: number) => void;
-}) {
-  return (
-    <div className={`${card} p-4 text-(--color-text-muted)`} data-testid="matrix-board">
-      {props.plotted.length} scored issues ready to plot.
     </div>
   );
 }
