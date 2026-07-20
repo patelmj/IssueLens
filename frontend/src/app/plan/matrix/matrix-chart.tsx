@@ -110,8 +110,7 @@ export function MatrixChart({
         ref={svgRef}
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         className="w-full touch-none select-none"
-        role="img"
-        aria-label="Priority matrix: urgency by importance"
+        aria-label="Priority matrix: urgency by importance. Bubbles are focusable; press Enter to select."
         data-testid="matrix-chart"
       >
         {QUADRANT_RECTS.map((q) => (
@@ -167,11 +166,22 @@ export function MatrixChart({
               key={item.issue_id}
               data-testid={`bubble-${item.number}`}
               className="cursor-grab"
+              role="button"
+              tabIndex={0}
+              aria-label={`Issue #${item.number}: ${item.title}`}
+              aria-pressed={isSelected}
               onPointerDown={onBubbleDown(item)}
               onPointerMove={onBubbleMove}
               onPointerUp={onBubbleUp(item)}
+              onPointerCancel={() => setDrag(null)}
               onPointerEnter={() => onHover(item, cx, cy)}
               onPointerLeave={() => onHover(null, 0, 0)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelect(selectedId === item.issue_id ? null : item.issue_id);
+                }
+              }}
             >
               {item.pinned ? (
                 <circle
