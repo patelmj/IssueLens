@@ -43,3 +43,41 @@ test("theme toggle flips data-mode and persists across reload", async ({
     });
   }).toPass();
 });
+
+test("header chip shows live repo stats", async ({ page }) => {
+  await page.route(/\/api\/backend\/stats\/overview/, (route) =>
+    route.fulfill({
+      json: {
+        connected_repos: 2,
+        open_issues: 5,
+        last_synced_at: null,
+        top_repos: [],
+        activity: [],
+      },
+    }),
+  );
+  await page.goto("/triage");
+  await expect(page.getByTestId("header-chip")).toHaveText(
+    "2 repos · 5 open issues",
+  );
+});
+
+test("header chip shows empty state when nothing is connected", async ({
+  page,
+}) => {
+  await page.route(/\/api\/backend\/stats\/overview/, (route) =>
+    route.fulfill({
+      json: {
+        connected_repos: 0,
+        open_issues: 0,
+        last_synced_at: null,
+        top_repos: [],
+        activity: [],
+      },
+    }),
+  );
+  await page.goto("/triage");
+  await expect(page.getByTestId("header-chip")).toHaveText(
+    "No repository connected",
+  );
+});
