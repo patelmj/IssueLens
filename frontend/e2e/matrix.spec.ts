@@ -156,6 +156,7 @@ test("release to AI restores computed placement", async ({ page }) => {
   await expect(page.getByTestId("pin-toast")).toBeVisible();
   await page.getByTestId("release-pin").click();
   await expect.poll(() => calls.releases).toBe(1);
+  await expect(page.getByTestId("pin-error")).not.toBeVisible();
   await expect(page.getByTestId("pin-ring-42")).not.toBeVisible();
   await expect(page.getByTestId("qgroup-dofirst")).toContainText("#42");
 });

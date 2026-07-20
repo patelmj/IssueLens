@@ -7,6 +7,7 @@ export async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
       typeof detail === "string" ? detail : `Request failed (${res.status})`,
     );
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
