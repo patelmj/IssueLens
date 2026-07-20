@@ -1,6 +1,23 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+
+import httpx
+from sqlalchemy import Select, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
+from app.llm.ollama import PriorityError, assess_priority, ensure_model
+from app.llm.readiness import MAX_BODY_CHARS
+from app.models import (
+    Issue,
+    IssueClassification,
+    IssuePriority,
+    IssueReadiness,
+    Repository,
+    SyncJob,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,3 +193,147 @@ def compute_signal_scores(
     return SignalScores(
         urgency=_clamp(urgency), importance=_clamp(importance), factors=factors
     )
+
+
+HEURISTIC_ONLY_MODEL = "heuristic-only"
+
+PRIORITY_PROMPT_TEMPLATE = """You are assessing the urgency and importance of a GitHub \
+issue for prioritization on an Eisenhower matrix.
+
+Repository: {repo_full_name}
+Issue title: {title}
+Issue body:
+{body}
+
+Judge ONLY what the issue text actually states; do not assume missing information.
+
+Return:
+- "urgency_adjustment": integer -25..25. Positive when the text states time pressure: a \
+regression, a customer or user blocked right now, a deadline, or work blocking other work. \
+Negative when the text says it can wait (nice-to-have, someday, exploratory).
+- "importance_adjustment": integer -25..25. Positive when the text states high impact: many \
+users affected, data loss, security exposure, revenue or trust at stake, core functionality \
+broken. Negative when impact is explicitly cosmetic, an edge case, or affects few users.
+- "factors": up to 4 short statements (max 15 words each) justifying the adjustments, each \
+tagged with the axis it affects ("urgency" or "importance") and its direction ("+" or "-").
+"""
+
+
+def build_priority_prompt(repo_full_name: str, issue: Issue) -> str:
+    return PRIORITY_PROMPT_TEMPLATE.format(
+        repo_full_name=repo_full_name,
+        title=issue.title,
+        body=(issue.body or "")[:MAX_BODY_CHARS] or "(empty)",
+    )
+
+
+def stale_priority_query(repo_id: int) -> Select:
+    """Open issues with no priority row, a newer update, or fresher upstream analysis."""
+    return (
+        select(Issue, IssueClassification, IssueReadiness)
+        .outerjoin(IssueClassification, IssueClassification.issue_id == Issue.id)
+        .outerjoin(IssueReadiness, IssueReadiness.issue_id == Issue.id)
+        .outerjoin(IssuePriority, IssuePriority.issue_id == Issue.id)
+        .where(
+            Issue.repository_id == repo_id,
+            Issue.is_pull_request.is_(False),
+            Issue.state == "open",
+            IssuePriority.issue_id.is_(None)
+            | (Issue.gh_updated_at > IssuePriority.issue_gh_updated_at)
+            | (IssueClassification.classified_at > IssuePriority.scored_at)
+            | (IssueReadiness.scored_at > IssuePriority.scored_at),
+        )
+        .order_by(Issue.id)
+    )
+
+
+def _clamp_score(value: int) -> int:
+    return max(0, min(100, value))
+
+
+async def score_repository_priorities(
+    session: AsyncSession, client: httpx.AsyncClient, repo_id: int
+) -> int:
+    repo = (
+        await session.execute(select(Repository).where(Repository.id == repo_id))
+    ).scalar_one()
+    job = SyncJob(repository_id=repo_id, kind="priority", status="running")
+    session.add(job)
+    await session.commit()
+    job_id = job.id
+    try:
+        llm_ready = True
+        try:
+            await ensure_model(client)
+        except httpx.HTTPError:
+            llm_ready = False
+            logger.exception("ollama unavailable; scoring repo %s heuristic-only", repo_id)
+        rows = list((await session.execute(stale_priority_query(repo_id))).all())
+        now = datetime.now(timezone.utc)
+        scored = 0
+        for issue, classification, readiness in rows:
+            signals = compute_signal_scores(
+                labels=issue.labels or [],
+                milestone_title=issue.milestone_title,
+                comments_count=issue.comments_count,
+                gh_created_at=issue.gh_created_at,
+                gh_updated_at=issue.gh_updated_at,
+                component=classification.component if classification else None,
+                readiness_score=readiness.score if readiness else None,
+                now=now,
+            )
+            urgency, importance = signals.urgency, signals.importance
+            factors = list(signals.factors)
+            model = HEURISTIC_ONLY_MODEL
+            if llm_ready:
+                try:
+                    assessment = await assess_priority(
+                        client, build_priority_prompt(repo.full_name, issue)
+                    )
+                except (httpx.HTTPError, PriorityError):
+                    logger.exception(
+                        "priority assessment failed for issue %s in repo %s",
+                        issue.id,
+                        repo_id,
+                    )
+                else:
+                    urgency = _clamp_score(urgency + assessment["urgency_adjustment"])
+                    importance = _clamp_score(
+                        importance + assessment["importance_adjustment"]
+                    )
+                    factors.extend(assessment["factors"])
+                    model = get_settings().ollama_model
+            values = {
+                "issue_id": issue.id,
+                "urgency": urgency,
+                "importance": importance,
+                "factors": factors,
+                "model": model,
+                "scored_at": func.now(),
+                "issue_gh_updated_at": issue.gh_updated_at,
+            }
+            await session.execute(
+                pg_insert(IssuePriority)
+                .values(**values)
+                .on_conflict_do_update(
+                    index_elements=["issue_id"],
+                    set_={k: v for k, v in values.items() if k != "issue_id"},
+                )
+            )
+            await session.commit()
+            scored += 1
+        job.status = "success"
+        job.issues_upserted = scored
+        job.finished_at = func.now()
+        await session.commit()
+        return scored
+    except Exception as exc:
+        await session.rollback()
+        job = (
+            await session.execute(select(SyncJob).where(SyncJob.id == job_id))
+        ).scalar_one()
+        job.status = "error"
+        job.error = str(exc)[:500]
+        job.finished_at = func.now()
+        await session.commit()
+        raise
