@@ -241,7 +241,8 @@ def stale_priority_query(repo_id: int) -> Select:
             IssuePriority.issue_id.is_(None)
             | (Issue.gh_updated_at > IssuePriority.issue_gh_updated_at)
             | (IssueClassification.classified_at > IssuePriority.scored_at)
-            | (IssueReadiness.scored_at > IssuePriority.scored_at),
+            | (IssueReadiness.scored_at > IssuePriority.scored_at)
+            | (IssuePriority.model == HEURISTIC_ONLY_MODEL),
         )
         .order_by(Issue.id)
     )

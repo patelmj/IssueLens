@@ -162,3 +162,27 @@ async def test_rescore_never_touches_pins(respx_mock, clean_db):
     async with get_sessionmaker()() as session:
         pin = (await session.execute(select(IssuePriorityPin))).scalar_one()
     assert pin.pinned_urgency == 95
+
+
+async def test_heuristic_only_rows_rescore_when_ollama_recovers(clean_db):
+    with respx.mock(base_url=BASE, assert_all_called=False) as respx_mock:
+        respx_mock.get("/api/tags").respond(status_code=503)
+        async with get_sessionmaker()() as session:
+            await seed_repo(session)
+            session.add(make_issue(9001, 42))
+            await session.commit()
+        async with get_sessionmaker()() as session, make_ollama_client() as client:
+            assert await score_repository_priorities(session, client, 500) == 1
+        async with get_sessionmaker()() as session:
+            row = (await session.execute(select(IssuePriority))).scalar_one()
+        assert row.model == "heuristic-only"
+
+    with respx.mock(base_url=BASE, assert_all_called=False) as respx_mock:
+        respx_mock.get("/api/tags").respond(json=TAGS)
+        respx_mock.post("/api/chat").respond(json=ASSESSMENT)
+        async with get_sessionmaker()() as session, make_ollama_client() as client:
+            assert await score_repository_priorities(session, client, 500) == 1
+        async with get_sessionmaker()() as session:
+            row = (await session.execute(select(IssuePriority))).scalar_one()
+        assert row.model == "test-model"
+        assert any(f["source"] == "llm" for f in row.factors)
