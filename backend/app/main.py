@@ -8,6 +8,7 @@ from app.db import get_engine
 from app.routers.issues import router as issues_router
 from app.routers.repositories import router as repositories_router
 from app.routers.stats import router as stats_router
+from app.routers.triage import router as triage_router
 
 
 @asynccontextmanager
@@ -20,6 +21,7 @@ app = FastAPI(title="IssueLens API", lifespan=lifespan)
 app.include_router(issues_router)
 app.include_router(repositories_router)
 app.include_router(stats_router)
+app.include_router(triage_router)
 
 
 @app.exception_handler(Exception)
