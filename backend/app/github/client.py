@@ -59,3 +59,28 @@ async def installation_get_paginated(
         url = resp.links.get("next", {}).get("url", "")
         first = False
     return items
+
+
+async def installation_get_one(
+    client: httpx.AsyncClient, installation_id: int, path: str
+) -> dict[str, Any]:
+    token = await get_installation_token(installation_id, client)
+    resp = await client.get(path, headers={"Authorization": f"Bearer {token}"})
+    _check_rate_limit(resp)
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def installation_patch(
+    client: httpx.AsyncClient,
+    installation_id: int,
+    path: str,
+    json: dict[str, Any],
+) -> dict[str, Any]:
+    token = await get_installation_token(installation_id, client)
+    resp = await client.patch(
+        path, json=json, headers={"Authorization": f"Bearer {token}"}
+    )
+    _check_rate_limit(resp)
+    resp.raise_for_status()
+    return resp.json()
