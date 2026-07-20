@@ -209,15 +209,15 @@ export function MatrixChart({
                 x={cx}
                 y={cy + 3.5}
                 textAnchor="middle"
-                fontSize="10"
-                fontWeight="600"
+                fontSize={Math.max(8.5, Math.min(11, r * 0.85))}
+                fontWeight="500"
                 fill="var(--color-text)"
                 stroke="var(--color-surface)"
-                strokeWidth="2.5"
+                strokeWidth="2"
                 paintOrder="stroke"
-                style={{ pointerEvents: "none" }}
+                style={{ fontVariantNumeric: "tabular-nums", pointerEvents: "none" }}
               >
-                #{item.number}
+                {item.number}
               </text>
             </g>
           );
