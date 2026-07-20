@@ -109,6 +109,23 @@ class IssueClassification(Base):
     issue_gh_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class IssueReadiness(Base):
+    __tablename__ = "issue_readiness"
+
+    issue_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    issue_type: Mapped[str] = mapped_column(Text)
+    score: Mapped[int] = mapped_column(Integer)
+    factors: Mapped[list] = mapped_column(JSONB, default=list)
+    model: Mapped[str] = mapped_column(Text)
+    scored_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    issue_gh_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    classification_scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
 
