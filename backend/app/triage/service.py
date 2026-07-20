@@ -1,9 +1,12 @@
 from typing import Any
 
+import httpx
 from sqlalchemy import Select, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.github.client import installation_get_one, installation_patch, make_http_client
+from app.github.sync import _parse_ts
 from app.llm.readiness import RUBRICS
 from app.models import (
     Issue,
@@ -12,6 +15,7 @@ from app.models import (
     IssueSuggestion,
     Repository,
 )
+from app.queue import get_arq_pool
 from app.triage.scaffold import build_proposed_body
 
 
@@ -163,5 +167,60 @@ async def update_suggestion(
     if status is not None:
         sug.status = status
     await session.commit()
+    await session.refresh(sug)
+    return sug
+
+
+class GitHubWriteError(Exception):
+    pass
+
+
+async def _enqueue_rescore(repo_id: int) -> None:
+    pool = await get_arq_pool()
+    await pool.enqueue_job(
+        "classify_repository", repo_id, _job_id=f"classify-{repo_id}"
+    )
+
+
+async def push_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggestion:
+    row = (
+        await session.execute(
+            select(IssueSuggestion, Issue, Repository)
+            .join(Issue, Issue.id == IssueSuggestion.issue_id)
+            .join(Repository, Repository.id == Issue.repository_id)
+            .where(IssueSuggestion.issue_id == issue_id)
+        )
+    ).first()
+    if row is None:
+        raise SuggestionNotFound()
+    sug, issue, repo = row
+    if sug.status in ("pushed", "rejected"):
+        raise SuggestionConflict(f"suggestion is {sug.status}")
+
+    path = f"/repos/{repo.full_name}/issues/{issue.number}"
+    async with make_http_client() as client:
+        live = await installation_get_one(client, repo.installation_id, path)
+        if (live.get("body") or "") != sug.base_body:
+            raise SuggestionConflict(
+                "issue changed on GitHub since this suggestion was generated; regenerate"
+            )
+        try:
+            updated = await installation_patch(
+                client, repo.installation_id, path, {"body": sug.proposed_body}
+            )
+        except httpx.HTTPStatusError as exc:
+            raise GitHubWriteError(
+                f"GitHub rejected the update (HTTP {exc.response.status_code}); "
+                "ensure the App has Issues: write permission"
+            ) from exc
+
+    issue.body = updated.get("body") or sug.proposed_body
+    updated_at = _parse_ts(updated.get("updated_at"))
+    if updated_at is not None:
+        issue.gh_updated_at = updated_at
+    sug.status = "pushed"
+    sug.pushed_at = func.now()
+    await session.commit()
+    await _enqueue_rescore(issue.repository_id)
     await session.refresh(sug)
     return sug

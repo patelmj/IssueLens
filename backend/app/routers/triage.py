@@ -121,3 +121,18 @@ async def update(
     except service.SuggestionConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return _to_out(sug)
+
+
+@router.post("/issues/{issue_id}/suggestion/push", response_model=SuggestionOut)
+async def push(
+    issue_id: int, session: AsyncSession = Depends(get_session)
+) -> SuggestionOut:
+    try:
+        sug = await service.push_suggestion(session, issue_id)
+    except service.SuggestionNotFound:
+        raise HTTPException(status_code=404, detail="No suggestion for this issue")
+    except service.SuggestionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except service.GitHubWriteError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return _to_out(sug)

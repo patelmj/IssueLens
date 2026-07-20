@@ -1,4 +1,6 @@
+import httpx
 import pytest
+import respx
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -7,6 +9,7 @@ from tests.test_api_issues import (
     seed_issues,
     seed_readiness,
 )
+from tests.test_github_auth import app_creds  # noqa: F401
 
 
 @pytest.fixture
@@ -144,3 +147,118 @@ async def test_bad_status_is_422(clean_db, api):
     await seed_readiness()
     resp = await api.patch("/issues/1/suggestion", json={"status": "pushed"})
     assert resp.status_code == 422  # Literal rejects 'pushed'
+
+
+def _push_seed_bodies():
+    """Set issue 1's body so the readiness seed's base matches on re-fetch."""
+    return "Auth fails after refresh."
+
+
+async def _set_issue_body(body: str):
+    from sqlalchemy import update
+
+    from app.db import get_sessionmaker
+    from app.models import Issue
+
+    async with get_sessionmaker()() as session:
+        await session.execute(update(Issue).where(Issue.id == 1).values(body=body))
+        await session.commit()
+
+
+class _FakePool:
+    def __init__(self):
+        self.jobs = []
+
+    async def enqueue_job(self, *args, **kwargs):
+        self.jobs.append((args, kwargs))
+        return object()
+
+
+def _token_route():
+    return respx.post("https://api.github.com/app/installations/42/access_tokens").mock(
+        return_value=httpx.Response(
+            201, json={"token": "ghs_test", "expires_at": "2099-01-01T00:00:00Z"}
+        )
+    )
+
+
+@respx.mock
+async def test_push_writes_body_updates_local_and_enqueues(clean_db, api, app_creds, monkeypatch):  # noqa: F811
+    await seed_issues()
+    await _set_issue_body("Auth fails after refresh.")
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    fake_pool = _FakePool()
+
+    async def fake_get_pool():
+        return fake_pool
+
+    from app.triage import service
+
+    monkeypatch.setattr(service, "get_arq_pool", fake_get_pool)
+
+    _token_route()
+    respx.get("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(200, json={"number": 1, "body": "Auth fails after refresh."})
+    )
+    patch_route = respx.patch("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(
+            200, json={"number": 1, "body": "PUSHED", "updated_at": "2026-07-20T12:00:00Z"}
+        )
+    )
+
+    resp = await api.post("/issues/1/suggestion/push")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "pushed"
+    assert patch_route.called
+    # re-score enqueued via the classify dedupe key
+    assert fake_pool.jobs == [
+        (("classify_repository", 500), {"_job_id": "classify-500"})
+    ]
+    # local issue body updated from the PATCH response
+    reloaded = await get_body(api, "/issues/1/suggestion")
+    assert reloaded["status"] == "pushed"
+
+
+@respx.mock
+async def test_push_write_safety_409_when_github_body_changed(clean_db, api, app_creds, monkeypatch):  # noqa: F811
+    await seed_issues()
+    await _set_issue_body("Auth fails after refresh.")
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    _token_route()
+    respx.get("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(200, json={"number": 1, "body": "SOMEONE ELSE EDITED THIS"})
+    )
+    resp = await api.post("/issues/1/suggestion/push")
+    assert resp.status_code == 409
+    assert "changed on GitHub" in resp.json()["detail"]
+
+
+@respx.mock
+async def test_push_502_when_github_forbids(clean_db, api, app_creds, monkeypatch):  # noqa: F811
+    await seed_issues()
+    await _set_issue_body("Auth fails after refresh.")
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    _token_route()
+    respx.get("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(200, json={"number": 1, "body": "Auth fails after refresh."})
+    )
+    respx.patch("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(403, json={"message": "Resource not accessible by integration"})
+    )
+    resp = await api.post("/issues/1/suggestion/push")
+    assert resp.status_code == 502
+
+
+async def test_push_404_when_no_suggestion(clean_db, api):
+    await seed_issues()
+    resp = await api.post("/issues/1/suggestion/push")
+    assert resp.status_code == 404
