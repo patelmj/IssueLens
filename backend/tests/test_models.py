@@ -129,3 +129,50 @@ async def test_issue_classification_round_trip_and_cascade(clean_db):
             )
         ).scalar_one_or_none()
         assert gone is None
+
+
+async def test_issue_suggestion_roundtrip(clean_db):
+    from datetime import datetime, timezone
+
+    from app.db import get_sessionmaker
+    from app.models import (
+        Installation,
+        Issue,
+        IssueSuggestion,
+        Repository,
+    )
+
+    now = datetime.now(timezone.utc)
+    async with get_sessionmaker()() as session:
+        session.add(Installation(id=42, account_login="patelmj"))
+        await session.flush()
+        session.add(
+            Repository(id=1, installation_id=42, full_name="o/r", owner="o", name="r")
+        )
+        await session.flush()
+        session.add(
+            Issue(
+                id=1, repository_id=1, number=1, title="t", state="open",
+                gh_created_at=now, gh_updated_at=now,
+            )
+        )
+        await session.flush()
+        session.add(
+            IssueSuggestion(
+                issue_id=1, status="draft", base_body="orig",
+                base_gh_updated_at=now, proposed_body="orig\n## X\n",
+                missing_requirements=[{"id": "repro_steps", "label": "Reproduction steps"}],
+            )
+        )
+        await session.commit()
+
+    async with get_sessionmaker()() as session:
+        from sqlalchemy import select
+
+        sug = (
+            await session.execute(select(IssueSuggestion).where(IssueSuggestion.issue_id == 1))
+        ).scalar_one()
+        assert sug.status == "draft"
+        assert sug.edited is False
+        assert sug.missing_requirements[0]["id"] == "repro_steps"
+        assert sug.pushed_at is None

@@ -126,6 +126,29 @@ class IssueReadiness(Base):
     classification_scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class IssueSuggestion(Base):
+    __tablename__ = "issue_suggestions"
+
+    issue_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(Text, default="draft", server_default="draft")
+    base_body: Mapped[str] = mapped_column(Text)
+    base_gh_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    proposed_body: Mapped[str] = mapped_column(Text)
+    missing_requirements: Mapped[list] = mapped_column(JSONB, default=list)
+    edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    pushed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
 
