@@ -9,3 +9,15 @@ export async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+export async function sendJson<T>(
+  url: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body?: unknown,
+): Promise<T> {
+  return getJson<T>(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
