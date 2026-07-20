@@ -151,3 +151,94 @@ async def score_readiness(
     except json.JSONDecodeError as exc:
         raise ReadinessError(f"model returned non-JSON: {content[:200]!r}") from exc
     return _normalize_readiness(raw, requirement_ids)
+
+
+MAX_PRIORITY_ADJUSTMENT = 25
+MAX_PRIORITY_FACTORS = 6
+MAX_FACTOR_TEXT_LENGTH = 200
+FACTOR_AXES = ("urgency", "importance")
+FACTOR_SIGNS = ("+", "-")
+
+
+class PriorityError(Exception):
+    """The model returned output we could not use for priority assessment."""
+
+
+PRIORITY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "urgency_adjustment": {"type": "integer"},
+        "importance_adjustment": {"type": "integer"},
+        "factors": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "axis": {"type": "string", "enum": list(FACTOR_AXES)},
+                    "sign": {"type": "string", "enum": list(FACTOR_SIGNS)},
+                    "text": {"type": "string"},
+                },
+                "required": ["axis", "sign", "text"],
+            },
+        },
+    },
+    "required": ["urgency_adjustment", "importance_adjustment", "factors"],
+}
+
+
+def _clamp_adjustment(raw: Any, field: str) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise PriorityError(f"invalid {field}: {raw!r}") from exc
+    return max(-MAX_PRIORITY_ADJUSTMENT, min(MAX_PRIORITY_ADJUSTMENT, value))
+
+
+def _normalize_priority(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise PriorityError(f"expected object, got {type(raw).__name__}")
+    if "urgency_adjustment" not in raw or "importance_adjustment" not in raw:
+        raise PriorityError("missing adjustment fields")
+    factors = []
+    for item in raw.get("factors") or []:
+        if not isinstance(item, dict):
+            continue
+        axis = item.get("axis")
+        sign = item.get("sign")
+        text = item.get("text")
+        if axis not in FACTOR_AXES or sign not in FACTOR_SIGNS or not isinstance(text, str):
+            continue
+        text = text.strip()[:MAX_FACTOR_TEXT_LENGTH]
+        if not text:
+            continue
+        factors.append({"axis": axis, "sign": sign, "text": text, "source": "llm", "weight": 0})
+        if len(factors) >= MAX_PRIORITY_FACTORS:
+            break
+    return {
+        "urgency_adjustment": _clamp_adjustment(raw["urgency_adjustment"], "urgency_adjustment"),
+        "importance_adjustment": _clamp_adjustment(
+            raw["importance_adjustment"], "importance_adjustment"
+        ),
+        "factors": factors,
+    }
+
+
+async def assess_priority(client: httpx.AsyncClient, prompt: str) -> dict[str, Any]:
+    resp = await client.post(
+        "/api/chat",
+        json={
+            "model": get_settings().ollama_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "think": False,
+            "format": PRIORITY_SCHEMA,
+            "options": {"temperature": 0},
+        },
+    )
+    resp.raise_for_status()
+    content = resp.json()["message"]["content"]
+    try:
+        raw = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise PriorityError(f"model returned non-JSON: {content[:200]!r}") from exc
+    return _normalize_priority(raw)
