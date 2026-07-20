@@ -193,6 +193,7 @@ export function MatrixClient() {
               onSelect={setSelectedId}
               onPin={(issueId, urgency, importance) => {
                 setHover(null);
+                setSelectedId(issueId);
                 pinMutation.mutate({ issueId, urgency, importance });
               }}
               onHover={(item, cx, cy) => setHover(item ? { item, cx, cy } : null)}
