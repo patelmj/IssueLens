@@ -13,11 +13,13 @@ import { getJson, sendJson } from "../../../lib/api";
 import { RightRail } from "../../../components/right-rail";
 import { PlanTabs } from "../plan-tabs";
 import { ExecutionQueue } from "./execution-queue";
+import { MatrixHoverCard } from "./hover-card";
 import { MatrixChart } from "./matrix-chart";
 import {
   toPlotted,
   type MatrixItem,
   type MatrixPayload,
+  type PlottedItem,
 } from "./matrix-types";
 
 const card =
@@ -47,6 +49,7 @@ export function MatrixClient() {
   });
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [hover, setHover] = useState<{ item: PlottedItem; cx: number; cy: number } | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   const patchItem = useCallback(
@@ -92,7 +95,6 @@ export function MatrixClient() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: matrixKey }),
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by Task 11 toast
   const releaseMutation = useMutation({
     mutationFn: (issueId: number) =>
       sendJson<undefined>(`/api/backend/issues/${issueId}/pin`, "DELETE"),
@@ -112,6 +114,7 @@ export function MatrixClient() {
 
   const items = data?.items ?? [];
   const plotted = toPlotted(items);
+  const selected = items.find((item) => item.issue_id === selectedId) ?? null;
 
   return (
     <div className="flex flex-col gap-4" data-testid="matrix-content">
@@ -183,15 +186,19 @@ export function MatrixClient() {
         </div>
       ) : (
         <>
-          <MatrixChart
-            plotted={plotted}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onPin={(issueId, urgency, importance) =>
-              pinMutation.mutate({ issueId, urgency, importance })
-            }
-            onHover={() => {}}
-          />
+          <div className="relative">
+            <MatrixChart
+              plotted={plotted}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onPin={(issueId, urgency, importance) => {
+                setHover(null);
+                pinMutation.mutate({ issueId, urgency, importance });
+              }}
+              onHover={(item, cx, cy) => setHover(item ? { item, cx, cy } : null)}
+            />
+            {hover ? <MatrixHoverCard item={hover.item} cx={hover.cx} cy={hover.cy} /> : null}
+          </div>
           <RightRail>
             <ExecutionQueue
               plotted={plotted}
@@ -199,6 +206,32 @@ export function MatrixClient() {
               onSelect={setSelectedId}
             />
           </RightRail>
+          {selected?.pinned ? (
+            <div
+              data-testid="pin-toast"
+              className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-[14px] border border-(--color-border) bg-(--color-surface) px-4 py-2.5 shadow-(--shadow-card)"
+            >
+              <span>
+                #{selected.number} is pinned — the AI will not move it.
+              </span>
+              <button
+                type="button"
+                data-testid="release-pin"
+                className="rounded-lg border border-(--color-border) px-2.5 py-1 text-(--color-primary) transition-all duration-150 hover:bg-(--accent-tint)"
+                onClick={() => releaseMutation.mutate(selected.issue_id)}
+              >
+                Release to AI
+              </button>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                className="text-(--color-text-muted) transition-all duration-150 hover:text-(--color-text)"
+                onClick={() => setSelectedId(null)}
+              >
+                ✕
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </div>
