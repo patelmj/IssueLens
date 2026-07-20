@@ -9,7 +9,14 @@ export const NAV_ITEMS = [
     items: [
       { label: "Overview", href: "/" },
       { label: "Triage", href: "/triage" },
-      { label: "Plan", href: "/plan" },
+      {
+        label: "Plan",
+        href: "/plan",
+        children: [
+          { label: "Table", href: "/plan" },
+          { label: "Matrix", href: "/plan/matrix" },
+        ],
+      },
       { label: "Analyze", href: "/analyze" },
     ],
   },
@@ -32,8 +39,10 @@ export function Sidenav() {
             {group}
           </div>
           <ul className="flex flex-col gap-0.5">
-            {items.map(({ label, href }) => {
+            {items.map(({ label, href, children }) => {
               const active = pathname === href;
+              const sectionActive =
+                !active && !!children && pathname.startsWith(`${href}/`);
               return (
                 <li key={href}>
                   <Link
@@ -42,7 +51,9 @@ export function Sidenav() {
                     className={`flex items-center justify-between rounded-lg px-3 py-1.5 transition-all duration-150 ${
                       active
                         ? "bg-(--accent-tint) font-medium text-(--color-primary)"
-                        : "text-(--color-text-muted) hover:bg-(--accent-tint) hover:text-(--color-text)"
+                        : sectionActive
+                          ? "bg-(--accent-tint) text-(--color-text-muted) hover:text-(--color-text)"
+                          : "text-(--color-text-muted) hover:bg-(--accent-tint) hover:text-(--color-text)"
                     }`}
                   >
                     <span>{label}</span>
@@ -50,6 +61,28 @@ export function Sidenav() {
                       –
                     </span>
                   </Link>
+                  {children ? (
+                    <ul className="mt-0.5 flex flex-col gap-0.5">
+                      {children.map((child) => {
+                        const childActive = pathname === child.href;
+                        return (
+                          <li key={child.href}>
+                            <Link
+                              href={child.href}
+                              aria-current={childActive ? "page" : undefined}
+                              className={`flex items-center rounded-lg py-1.5 pl-7 transition-all duration-150 ${
+                                childActive
+                                  ? "bg-(--accent-tint) font-medium text-(--color-primary)"
+                                  : "text-(--color-text-muted) hover:bg-(--accent-tint) hover:text-(--color-text)"
+                              }`}
+                            >
+                              {child.label}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
                 </li>
               );
             })}

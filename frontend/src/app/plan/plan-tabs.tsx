@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 const TABS = [
   { label: "Table", href: "/plan" },
@@ -10,6 +10,9 @@ const TABS = [
 
 export function PlanTabs() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const repoId = searchParams.get("repo_id");
+
   return (
     <div
       className="flex items-center gap-0.5 rounded-[9px] border border-(--color-border) bg-(--color-surface) p-0.5"
@@ -18,7 +21,7 @@ export function PlanTabs() {
       {TABS.map(({ label, href }) => (
         <Link
           key={href}
-          href={href}
+          href={repoId ? `${href}?repo_id=${repoId}` : href}
           aria-current={pathname === href ? "page" : undefined}
           className={`rounded-[7px] px-2.5 py-1 transition-all duration-150 ${
             pathname === href
