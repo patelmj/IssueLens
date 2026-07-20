@@ -10,7 +10,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { getJson, sendJson } from "../../../lib/api";
+import { RightRail } from "../../../components/right-rail";
 import { PlanTabs } from "../plan-tabs";
+import { ExecutionQueue } from "./execution-queue";
 import { MatrixChart } from "./matrix-chart";
 import {
   toPlotted,
@@ -180,15 +182,24 @@ export function MatrixClient() {
           No scored issues yet — scores appear after the next analysis run.
         </div>
       ) : (
-        <MatrixChart
-          plotted={plotted}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onPin={(issueId, urgency, importance) =>
-            pinMutation.mutate({ issueId, urgency, importance })
-          }
-          onHover={() => {}}
-        />
+        <>
+          <MatrixChart
+            plotted={plotted}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onPin={(issueId, urgency, importance) =>
+              pinMutation.mutate({ issueId, urgency, importance })
+            }
+            onHover={() => {}}
+          />
+          <RightRail>
+            <ExecutionQueue
+              plotted={plotted}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
+          </RightRail>
+        </>
       )}
     </div>
   );
