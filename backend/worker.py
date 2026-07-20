@@ -9,6 +9,7 @@ from app.github.client import make_http_client
 from app.github.sync import sync_repository_issues
 from app.llm.classify import classify_repository_issues
 from app.llm.ollama import make_ollama_client
+from app.llm.readiness import score_repository_issues
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,13 @@ async def sync_repository(ctx: dict, repo_id: int, full: bool = False) -> int:
 
 async def classify_repository(ctx: dict, repo_id: int) -> int:
     async with get_sessionmaker()() as session, make_ollama_client() as client:
-        return await classify_repository_issues(session, client, repo_id)
+        count = await classify_repository_issues(session, client, repo_id)
+    redis = ctx.get("redis")
+    if redis is not None:
+        await redis.enqueue_job(
+            "score_readiness_repository", repo_id, _job_id=f"readiness-{repo_id}"
+        )
+    return count
 
 
 async def reconcile_all_repositories(ctx: dict) -> int:
@@ -70,11 +77,42 @@ async def classify_all_repositories(ctx: dict) -> int:
     return done
 
 
+async def score_readiness_repository(ctx: dict, repo_id: int) -> int:
+    async with get_sessionmaker()() as session, make_ollama_client() as client:
+        return await score_repository_issues(session, client, repo_id)
+
+
+async def score_all_repositories(ctx: dict) -> int:
+    """Safety net for issues classified while Ollama was down; enqueues via the dedupe key."""
+    from sqlalchemy import select
+
+    from app.models import Repository
+
+    async with get_sessionmaker()() as session:
+        repo_ids = list((await session.execute(select(Repository.id))).scalars())
+    done = 0
+    for repo_id in repo_ids:
+        try:
+            await ctx["redis"].enqueue_job(
+                "score_readiness_repository", repo_id, _job_id=f"readiness-{repo_id}"
+            )
+            done += 1
+        except Exception:
+            logger.exception("readiness sweep failed for repo %s", repo_id)
+    return done
+
+
 class WorkerSettings:
-    functions = [func(ping, keep_result=60), sync_repository, classify_repository]
+    functions = [
+        func(ping, keep_result=60),
+        sync_repository,
+        classify_repository,
+        score_readiness_repository,
+    ]
     cron_jobs = [
         cron(reconcile_all_repositories, name="reconcile_all_repositories", minute={0, 30}),
         cron(classify_all_repositories, name="classify_all_repositories", minute={15, 45}),
+        cron(score_all_repositories, name="score_all_repositories", minute={20, 50}),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     # keep_result=0: results are never read, and a retained result key would
