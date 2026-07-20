@@ -3,9 +3,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { getJson } from "../../lib/api";
 import { relativeTime } from "../../lib/time";
+import { ReadinessDrawer } from "./readiness-drawer";
 import { Toolbar } from "./toolbar";
 
 export type IssueRow = {
@@ -26,6 +27,7 @@ export type IssueRow = {
   issue_type: "bug" | "feature" | "debt" | "question" | "docs" | null;
   component: string | null;
   classification_confidence: number | null;
+  readiness_score: number | null;
 };
 
 export type IssuePage = {
@@ -35,7 +37,13 @@ export type IssuePage = {
   offset: number;
 };
 
-export type SortKey = "updated" | "created" | "comments" | "number" | "title";
+export type SortKey =
+  | "updated"
+  | "created"
+  | "comments"
+  | "number"
+  | "title"
+  | "readiness";
 
 export type ColumnKey =
   | "repo"
@@ -43,6 +51,7 @@ export type ColumnKey =
   | "title"
   | "type"
   | "component"
+  | "ready"
   | "labels"
   | "assignees"
   | "comments"
@@ -60,6 +69,7 @@ export type TableParams = {
   q: string | null;
   type: string | null;
   component: string | null;
+  maxReadiness: string | null;
   setParams: (updates: Record<string, string | null>) => void;
 };
 
@@ -74,6 +84,7 @@ export const COLUMNS: {
   { key: "title", label: "Title", sort: "title", defaultVisible: true },
   { key: "type", label: "Type", defaultVisible: true },
   { key: "component", label: "Component", defaultVisible: true },
+  { key: "ready", label: "Ready", sort: "readiness", defaultVisible: true },
   { key: "labels", label: "Labels", defaultVisible: true },
   { key: "assignees", label: "Assignees", defaultVisible: true },
   { key: "comments", label: "Comments", sort: "comments", defaultVisible: true },
@@ -95,6 +106,12 @@ function stateBadge(state: IssueRow["state"]) {
   return state === "open"
     ? "text-(--color-primary) border-(--color-primary)"
     : "text-(--color-text-muted) border-(--color-border)";
+}
+
+function readinessTone(score: number): string {
+  if (score < 40) return "text-(--type-bug)";
+  if (score < 75) return "text-(--type-debt)";
+  return "text-(--type-feature)";
 }
 
 const TYPE_BADGE: Record<string, string> = {
@@ -129,6 +146,7 @@ export function PlanClient() {
   const q = searchParams.get("q");
   const typeFilter = searchParams.get("type");
   const component = searchParams.get("component");
+  const maxReadiness = searchParams.get("max_readiness");
   const sort = (searchParams.get("sort") ?? "updated") as SortKey;
   const order = searchParams.get("order") ?? "desc";
   const offset = Math.max(0, Number(searchParams.get("offset") ?? "0") || 0);
@@ -146,6 +164,7 @@ export function PlanClient() {
   if (q) backendQuery.set("q", q);
   if (typeFilter) backendQuery.set("type", typeFilter);
   if (component) backendQuery.set("component", component);
+  if (maxReadiness) backendQuery.set("max_readiness", maxReadiness);
 
   const { data, error, isPending } = useQuery({
     queryKey: ["issues", backendQuery.toString()],
@@ -162,6 +181,7 @@ export function PlanClient() {
   const [visible, setVisible] = useState<Set<ColumnKey>>(
     () => new Set(COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)),
   );
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const onToggleColumn = (key: ColumnKey) => {
     setVisible((prev) => {
@@ -205,6 +225,7 @@ export function PlanClient() {
           q,
           type: typeFilter,
           component,
+          maxReadiness,
           setParams,
         }}
         visible={visible}
@@ -285,10 +306,8 @@ export function PlanClient() {
               </thead>
               <tbody>
                 {data.items.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-(--color-border) last:border-b-0"
-                  >
+                  <Fragment key={row.id}>
+                    <tr className="border-b border-(--color-border) last:border-b-0">
                     {visible.has("repo") ? (
                       <td className="px-3 py-2 whitespace-nowrap text-(--color-text-muted)">
                         {row.repo_full_name.split("/")[1]}
@@ -336,6 +355,26 @@ export function PlanClient() {
                         data-testid="component-cell"
                       >
                         {row.component ?? "—"}
+                      </td>
+                    ) : null}
+                    {visible.has("ready") ? (
+                      <td className="px-3 py-2" data-testid="ready-cell">
+                        {row.readiness_score != null ? (
+                          <button
+                            type="button"
+                            aria-expanded={expandedId === row.id}
+                            onClick={() =>
+                              setExpandedId(
+                                expandedId === row.id ? null : row.id,
+                              )
+                            }
+                            className={`tabular-nums transition-all duration-150 hover:text-(--color-primary) ${readinessTone(row.readiness_score)}`}
+                          >
+                            {row.readiness_score}%
+                          </button>
+                        ) : (
+                          <span className="text-(--color-text-muted)">—</span>
+                        )}
                       </td>
                     ) : null}
                     {visible.has("labels") ? (
@@ -400,7 +439,15 @@ export function PlanClient() {
                         {relativeTime(row.gh_created_at)}
                       </td>
                     ) : null}
-                  </tr>
+                    </tr>
+                    {expandedId === row.id ? (
+                      <tr className="border-b border-(--color-border) bg-(--accent-tint)">
+                        <td colSpan={shownColumns.length} className="px-3 py-3">
+                          <ReadinessDrawer issueId={row.id} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

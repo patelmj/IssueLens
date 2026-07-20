@@ -23,6 +23,14 @@ const STATES = [
 
 const TYPES = ["bug", "feature", "debt", "question", "docs"];
 
+const READINESS_THRESHOLDS = [
+  { value: "", label: "Any readiness" },
+  { value: "90", label: "Readiness < 90%" },
+  { value: "75", label: "Readiness < 75%" },
+  { value: "50", label: "Readiness < 50%" },
+  { value: "25", label: "Readiness < 25%" },
+];
+
 export function Toolbar({
   params,
   visible,
@@ -32,7 +40,8 @@ export function Toolbar({
   visible: Set<ColumnKey>;
   onToggleColumn: (key: ColumnKey) => void;
 }) {
-  const { repoId, state, label, assignee, q, type, component, setParams } = params;
+  const { repoId, state, label, assignee, q, type, component, maxReadiness, setParams } =
+    params;
 
   const { data: repos } = useQuery({
     queryKey: ["repositories"],
@@ -167,6 +176,21 @@ export function Toolbar({
         {(facets?.components ?? []).map((c) => (
           <option key={c} value={c}>
             {c}
+          </option>
+        ))}
+      </select>
+
+      <select
+        aria-label="Readiness"
+        className={control}
+        value={maxReadiness ?? ""}
+        onChange={(e) =>
+          setParams({ max_readiness: e.target.value || null, offset: null })
+        }
+      >
+        {READINESS_THRESHOLDS.map((t) => (
+          <option key={t.value} value={t.value}>
+            {t.label}
           </option>
         ))}
       </select>

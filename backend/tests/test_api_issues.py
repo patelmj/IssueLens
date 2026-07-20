@@ -5,7 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.db import get_sessionmaker
 from app.main import app
-from app.models import Installation, Issue, IssueClassification, Repository
+from app.models import Installation, Issue, IssueClassification, IssueReadiness, Repository
 
 NOW = datetime.now(timezone.utc)
 
@@ -231,3 +231,75 @@ async def test_facets_include_components(clean_db, api):
     assert body["components"] == ["auth", "sync"]
     scoped = await get_body(api, "/issues/facets?repo_id=501")
     assert scoped["components"] == ["sync"]
+
+
+async def seed_readiness():
+    async with get_sessionmaker()() as session:
+        session.add(
+            IssueReadiness(
+                issue_id=1, issue_type="bug", score=42,
+                factors=[
+                    {"requirement": "Problem statement", "points": 15, "present": True, "evidence": "crash"},
+                    {"requirement": "Reproduction steps", "points": 20, "present": False, "evidence": None},
+                ],
+                model="test-model",
+                issue_gh_updated_at=NOW - timedelta(days=1),
+                classification_scored_at=NOW - timedelta(hours=1),
+            )
+        )
+        session.add(
+            IssueReadiness(
+                issue_id=4, issue_type="feature", score=88, factors=[],
+                model="test-model",
+                issue_gh_updated_at=NOW - timedelta(hours=3),
+                classification_scored_at=NOW - timedelta(hours=1),
+            )
+        )
+        await session.commit()
+
+
+async def test_rows_include_readiness_score(clean_db, api):
+    await seed_issues()
+    await seed_readiness()
+    body = await get_body(api, "/issues?state=all&sort=number&order=asc")
+    by_title = {i["title"]: i for i in body["items"]}
+    assert by_title["Alpha bug"]["readiness_score"] == 42
+    assert by_title["Delta task"]["readiness_score"] == 88
+    assert by_title["Beta feature"]["readiness_score"] is None  # closed, unscored
+
+
+async def test_max_readiness_filter_excludes_high_and_unscored(clean_db, api):
+    await seed_issues()
+    await seed_readiness()
+    body = await get_body(api, "/issues?max_readiness=80")
+    assert [i["title"] for i in body["items"]] == ["Alpha bug"]  # 42<80; 88 and unscored excluded
+
+
+async def test_sort_by_readiness_puts_nulls_last(clean_db, api):
+    await seed_issues()
+    await seed_readiness()
+    body = await get_body(api, "/issues?state=all&sort=readiness&order=desc")
+    scores = [i["readiness_score"] for i in body["items"]]
+    assert scores[:2] == [88, 42]
+    assert scores[-1] is None
+
+
+async def test_readiness_breakdown_endpoint(clean_db, api):
+    await seed_issues()
+    await seed_readiness()
+    body = await get_body(api, "/issues/1/readiness")
+    assert body["score"] == 42
+    assert body["issue_type"] == "bug"
+    assert body["factors"][0]["requirement"] == "Problem statement"
+    assert body["factors"][0]["present"] is True
+
+
+async def test_readiness_breakdown_404_when_absent(clean_db, api):
+    await seed_issues()
+    async with api as client:
+        assert (await client.get("/issues/2/readiness")).status_code == 404
+
+
+async def test_bad_max_readiness_is_422(clean_db, api):
+    async with api as client:
+        assert (await client.get("/issues?max_readiness=200")).status_code == 422
