@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timezone
+
 import httpx
 import pytest
 import respx
@@ -149,11 +152,6 @@ async def test_bad_status_is_422(clean_db, api):
     assert resp.status_code == 422  # Literal rejects 'pushed'
 
 
-def _push_seed_bodies():
-    """Set issue 1's body so the readiness seed's base matches on re-fetch."""
-    return "Auth fails after refresh."
-
-
 async def _set_issue_body(body: str):
     from sqlalchemy import update
 
@@ -163,6 +161,18 @@ async def _set_issue_body(body: str):
     async with get_sessionmaker()() as session:
         await session.execute(update(Issue).where(Issue.id == 1).values(body=body))
         await session.commit()
+
+
+async def _get_issue(issue_id: int):
+    from sqlalchemy import select
+
+    from app.db import get_sessionmaker
+    from app.models import Issue
+
+    async with get_sessionmaker()() as session:
+        return (
+            await session.execute(select(Issue).where(Issue.id == issue_id))
+        ).scalar_one()
 
 
 class _FakePool:
@@ -213,6 +223,9 @@ async def test_push_writes_body_updates_local_and_enqueues(clean_db, api, app_cr
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "pushed"
     assert patch_route.called
+    # the PATCH must carry the scaffolded proposal, not the live/original body
+    sent_body = json.loads(patch_route.calls.last.request.content)["body"]
+    assert "## Reproduction Steps" in sent_body
     # re-score enqueued via the classify dedupe key
     assert fake_pool.jobs == [
         (("classify_repository", 500), {"_job_id": "classify-500"})
@@ -220,6 +233,9 @@ async def test_push_writes_body_updates_local_and_enqueues(clean_db, api, app_cr
     # local issue body updated from the PATCH response
     reloaded = await get_body(api, "/issues/1/suggestion")
     assert reloaded["status"] == "pushed"
+    issue = await _get_issue(1)
+    assert issue.body == "PUSHED"
+    assert issue.gh_updated_at == datetime(2026, 7, 20, 12, 0, 0, tzinfo=timezone.utc)
 
 
 @respx.mock
@@ -253,6 +269,45 @@ async def test_push_502_when_github_forbids(clean_db, api, app_creds, monkeypatc
     )
     respx.patch("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
         return_value=httpx.Response(403, json={"message": "Resource not accessible by integration"})
+    )
+    resp = await api.post("/issues/1/suggestion/push")
+    assert resp.status_code == 502
+
+
+@respx.mock
+async def test_push_502_when_refetch_get_fails(clean_db, api, app_creds, monkeypatch):  # noqa: F811
+    await seed_issues()
+    await _set_issue_body("Auth fails after refresh.")
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    _token_route()
+    respx.get("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(403, json={"message": "Resource not accessible by integration"})
+    )
+    resp = await api.post("/issues/1/suggestion/push")
+    assert resp.status_code == 502
+
+
+@respx.mock
+async def test_push_502_when_patch_rate_limited(clean_db, api, app_creds, monkeypatch):  # noqa: F811
+    await seed_issues()
+    await _set_issue_body("Auth fails after refresh.")
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    _token_route()
+    respx.get("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(200, json={"number": 1, "body": "Auth fails after refresh."})
+    )
+    respx.patch("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(
+            403,
+            headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1790000000"},
+            json={"message": "API rate limit exceeded"},
+        )
     )
     resp = await api.post("/issues/1/suggestion/push")
     assert resp.status_code == 502

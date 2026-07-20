@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import httpx
@@ -5,7 +6,12 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.github.client import installation_get_one, installation_patch, make_http_client
+from app.github.client import (
+    GitHubRateLimited,
+    installation_get_one,
+    installation_patch,
+    make_http_client,
+)
 from app.github.sync import _parse_ts
 from app.llm.readiness import RUBRICS
 from app.models import (
@@ -17,6 +23,8 @@ from app.models import (
 )
 from app.queue import get_arq_pool
 from app.triage.scaffold import build_proposed_body
+
+logger = logging.getLogger(__name__)
 
 
 def missing_requirements(issue_type: str, factors: list[dict]) -> list[dict[str, str]]:
@@ -199,7 +207,10 @@ async def push_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggesti
 
     path = f"/repos/{repo.full_name}/issues/{issue.number}"
     async with make_http_client() as client:
-        live = await installation_get_one(client, repo.installation_id, path)
+        try:
+            live = await installation_get_one(client, repo.installation_id, path)
+        except (httpx.HTTPError, GitHubRateLimited) as exc:
+            raise GitHubWriteError(f"GitHub read failed (HTTP re-fetch); {exc}") from exc
         if (live.get("body") or "") != sug.base_body:
             raise SuggestionConflict(
                 "issue changed on GitHub since this suggestion was generated; regenerate"
@@ -208,10 +219,9 @@ async def push_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggesti
             updated = await installation_patch(
                 client, repo.installation_id, path, {"body": sug.proposed_body}
             )
-        except httpx.HTTPStatusError as exc:
+        except (httpx.HTTPError, GitHubRateLimited) as exc:
             raise GitHubWriteError(
-                f"GitHub rejected the update (HTTP {exc.response.status_code}); "
-                "ensure the App has Issues: write permission"
+                f"GitHub rejected the update; ensure the App has Issues: write permission ({exc})"
             ) from exc
 
     issue.body = updated.get("body") or sug.proposed_body
@@ -221,6 +231,12 @@ async def push_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggesti
     sug.status = "pushed"
     sug.pushed_at = func.now()
     await session.commit()
-    await _enqueue_rescore(issue.repository_id)
+    try:
+        await _enqueue_rescore(issue.repository_id)
+    except Exception:
+        logger.warning(
+            "failed to enqueue re-score for repo %s after push", issue.repository_id,
+            exc_info=True,
+        )
     await session.refresh(sug)
     return sug
