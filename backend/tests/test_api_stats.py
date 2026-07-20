@@ -93,3 +93,32 @@ async def test_overview_stats_seeded(clean_db, api):
     assert sum(d["closed"] for d in body["activity"]) == 1
     dates = [d["date"] for d in body["activity"]]
     assert dates == sorted(dates)
+
+
+async def test_top_repos_capped_at_five_in_order(clean_db, api):
+    async with get_sessionmaker()() as session:
+        session.add(Installation(id=42, account_login="patelmj"))
+        await session.flush()
+        counts = {"r-a": 10, "r-b": 8, "r-c": 8, "r-d": 6, "r-e": 4, "r-f": 2}
+        for idx, (name, count) in enumerate(counts.items()):
+            session.add(
+                Repository(
+                    id=600 + idx, installation_id=42,
+                    full_name=f"patelmj/{name}", owner="patelmj", name=name,
+                    open_issues_count=count,
+                )
+            )
+        await session.commit()
+
+    async with api as client:
+        resp = await client.get("/stats/overview")
+    assert resp.status_code == 200
+    top = resp.json()["top_repos"]
+    assert len(top) == 5  # 6 repos seeded, cap is 5
+    assert [r["full_name"] for r in top] == [
+        "patelmj/r-a",   # 10
+        "patelmj/r-b",   # 8 — ties broken by name asc
+        "patelmj/r-c",   # 8
+        "patelmj/r-d",   # 6
+        "patelmj/r-e",   # 4
+    ]
