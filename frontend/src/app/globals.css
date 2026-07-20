@@ -21,6 +21,15 @@
   --chart-closed: #008300;
   --chart-grid: #e7e6e1;
   --chart-axis: #c9c8c2;
+  --pm-bug: #2a78d6;
+  --pm-feature: #008300;
+  --pm-debt: #e87ba4;
+  --pm-other: #eda100;
+  --quad-schedule: rgba(42, 120, 214, 0.05);
+  --quad-dofirst: rgba(209, 36, 47, 0.05);
+  --quad-delegate: rgba(27, 124, 131, 0.05);
+  --quad-reconsider: rgba(110, 112, 118, 0.05);
+  --pin-ring: #17181c;
 }
 
 :root[data-mode="dark"] {
@@ -42,6 +51,15 @@
   --chart-closed: #008300;
   --chart-grid: #2c2c2a;
   --chart-axis: #383835;
+  --pm-bug: #3987e5;
+  --pm-feature: #008300;
+  --pm-debt: #d55181;
+  --pm-other: #c98500;
+  --quad-schedule: rgba(57, 135, 229, 0.1);
+  --quad-dofirst: rgba(244, 112, 103, 0.1);
+  --quad-delegate: rgba(57, 197, 207, 0.1);
+  --quad-reconsider: rgba(150, 152, 161, 0.1);
+  --pin-ring: #ededf0;
 }
 
 body {
@@ -52,4 +70,16 @@ body {
     sans-serif;
   font-size: 13px;
   transition: background 0.15s ease, color 0.15s ease;
+}
+
+.qrow-flash {
+  animation: rowflash 1.2s ease;
+}
+@keyframes rowflash {
+  0% {
+    background: var(--flash);
+  }
+  100% {
+    background: transparent;
+  }
 }

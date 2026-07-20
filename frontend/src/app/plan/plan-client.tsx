@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useState } from "react";
 import { getJson } from "../../lib/api";
 import { relativeTime } from "../../lib/time";
+import { PlanTabs } from "./plan-tabs";
 import { ReadinessDrawer } from "./readiness-drawer";
 import { Toolbar } from "./toolbar";
 
@@ -214,6 +215,8 @@ export function PlanClient() {
         <span className="text-(--color-text-muted)">
           Issues across your synced repositories
         </span>
+        <div className="grow" />
+        <PlanTabs />
       </div>
 
       <Toolbar
