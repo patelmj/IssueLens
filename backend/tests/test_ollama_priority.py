@@ -83,3 +83,15 @@ async def test_assess_priority_rejects_missing_adjustments(respx_mock):
     async with make_ollama_client() as client:
         with pytest.raises(PriorityError):
             await assess_priority(client, "prompt")
+
+
+@respx.mock(base_url=BASE)
+async def test_assess_priority_rejects_non_list_factors(respx_mock):
+    respx_mock.post("/api/chat").respond(
+        json=chat_response(
+            {"urgency_adjustment": 0, "importance_adjustment": 0, "factors": 5}
+        )
+    )
+    async with make_ollama_client() as client:
+        with pytest.raises(PriorityError):
+            await assess_priority(client, "prompt")

@@ -199,8 +199,11 @@ def _normalize_priority(raw: Any) -> dict[str, Any]:
         raise PriorityError(f"expected object, got {type(raw).__name__}")
     if "urgency_adjustment" not in raw or "importance_adjustment" not in raw:
         raise PriorityError("missing adjustment fields")
+    factors_raw = raw.get("factors") or []
+    if not isinstance(factors_raw, list):
+        raise PriorityError(f"invalid factors: {factors_raw!r}")
     factors = []
-    for item in raw.get("factors") or []:
+    for item in factors_raw:
         if not isinstance(item, dict):
             continue
         axis = item.get("axis")
