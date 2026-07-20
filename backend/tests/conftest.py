@@ -46,6 +46,8 @@ async def pin_env(monkeypatch):
     """Pin behavior-affecting env vars explicitly; never inherit host state silently."""
     monkeypatch.setenv("ISSUELENS_DATABASE_URL", TEST_DATABASE_URL)
     monkeypatch.setenv("ISSUELENS_REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setenv("ISSUELENS_OLLAMA_URL", "http://127.0.0.1:11434")
+    monkeypatch.setenv("ISSUELENS_OLLAMA_MODEL", "test-model")
     monkeypatch.delenv("ISSUELENS_GITHUB_APP_ID", raising=False)
     monkeypatch.delenv("ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64", raising=False)
     get_settings.cache_clear()

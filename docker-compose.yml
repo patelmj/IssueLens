@@ -25,6 +25,20 @@ services:
       timeout: 5s
       retries: 10
 
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
   backend:
     build: ./backend
     command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -50,6 +64,7 @@ services:
     environment:
       ISSUELENS_DATABASE_URL: postgresql+asyncpg://issuelens:issuelens@postgres:5432/issuelens
       ISSUELENS_REDIS_URL: redis://redis:6379/0
+      ISSUELENS_OLLAMA_URL: http://ollama:11434
       # Forwarded from repo-root .env (compose does not inject .env into containers by itself)
       ISSUELENS_GITHUB_APP_ID: ${ISSUELENS_GITHUB_APP_ID:-}
       ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64: ${ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64:-}
@@ -74,3 +89,4 @@ services:
 
 volumes:
   pgdata:
+  ollamadata:
