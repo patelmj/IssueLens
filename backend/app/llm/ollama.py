@@ -83,3 +83,71 @@ async def classify(client: httpx.AsyncClient, prompt: str) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise ClassificationError(f"model returned non-JSON: {content[:200]!r}") from exc
     return _normalize(raw)
+
+
+MAX_EVIDENCE_LENGTH = 200
+
+
+class ReadinessError(Exception):
+    """The model returned output we could not use for readiness scoring."""
+
+
+def readiness_schema(requirement_ids: list[str]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            rid: {
+                "type": "object",
+                "properties": {
+                    "present": {"type": "boolean"},
+                    "evidence": {"type": ["string", "null"]},
+                },
+                "required": ["present"],
+            }
+            for rid in requirement_ids
+        },
+        "required": list(requirement_ids),
+    }
+
+
+def _normalize_readiness(
+    raw: dict[str, Any], requirement_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw, dict):
+        raise ReadinessError(f"expected object, got {type(raw).__name__}")
+    result: dict[str, dict[str, Any]] = {}
+    for rid in requirement_ids:
+        item = raw.get(rid)
+        if not isinstance(item, dict):
+            result[rid] = {"present": False, "evidence": None}
+            continue
+        evidence = item.get("evidence")
+        if isinstance(evidence, str):
+            evidence = evidence.strip()[:MAX_EVIDENCE_LENGTH] or None
+        else:
+            evidence = None
+        result[rid] = {"present": bool(item.get("present", False)), "evidence": evidence}
+    return result
+
+
+async def score_readiness(
+    client: httpx.AsyncClient, prompt: str, requirement_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    resp = await client.post(
+        "/api/chat",
+        json={
+            "model": get_settings().ollama_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "think": False,
+            "format": readiness_schema(requirement_ids),
+            "options": {"temperature": 0},
+        },
+    )
+    resp.raise_for_status()
+    content = resp.json()["message"]["content"]
+    try:
+        raw = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ReadinessError(f"model returned non-JSON: {content[:200]!r}") from exc
+    return _normalize_readiness(raw, requirement_ids)
