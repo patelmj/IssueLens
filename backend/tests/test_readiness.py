@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.db import get_sessionmaker
 from app.llm.ollama import (
+    ISSUE_TYPES,
     ReadinessError,
     _normalize_readiness,
     make_ollama_client,
@@ -38,6 +39,10 @@ def test_every_rubric_sums_to_100():
         assert sum(r.points for r in reqs) == 100, issue_type
         ids = [r.id for r in reqs]
         assert len(ids) == len(set(ids)), f"duplicate id in {issue_type}"
+
+
+def test_rubrics_keys_match_issue_types():
+    assert set(RUBRICS) == set(ISSUE_TYPES)
 
 
 def test_readiness_schema_requires_every_requirement():
@@ -212,3 +217,4 @@ async def test_stale_query_and_prompt(clean_db):
     assert "patelmj/mehova" in prompt
     assert "Acceptance criteria" in prompt
     assert "feature" in prompt
+    assert "new capability or enhancement" in prompt

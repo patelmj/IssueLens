@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.llm.ollama import ReadinessError, ensure_model, score_readiness
+from app.llm.ollama import ISSUE_TYPES, ReadinessError, ensure_model, score_readiness
 from app.models import Issue, IssueClassification, IssueReadiness, Repository, SyncJob
 
 logger = logging.getLogger(__name__)
@@ -67,11 +67,24 @@ RUBRICS: dict[str, list[Requirement]] = {
 for _issue_type, _reqs in RUBRICS.items():
     assert sum(r.points for r in _reqs) == 100, f"rubric {_issue_type} does not sum to 100"
 
+assert set(RUBRICS) == set(ISSUE_TYPES), "RUBRICS keys must match ISSUE_TYPES"
+
+
+TYPE_DEFINITIONS: dict[str, str] = {
+    "bug": "defect in existing behavior",
+    "feature": "new capability or enhancement",
+    "debt": "refactoring, cleanup, or technical debt",
+    "question": "support question or discussion",
+    "docs": "documentation",
+}
+
 
 MAX_BODY_CHARS = 4000
 
 PROMPT_TEMPLATE = """You are assessing how ready a GitHub {issue_type} issue is to be \
 worked on.
+
+Here, "{issue_type}" means: {type_definition}.
 
 An issue is "ready" when it contains the information a developer needs to act without \
 asking follow-up questions. Judge ONLY what the issue text below actually contains; do \
@@ -98,6 +111,7 @@ def build_prompt(
     requirements = "\n".join(f'- "{r.id}": {r.label}' for r in rubric)
     return PROMPT_TEMPLATE.format(
         issue_type=issue_type,
+        type_definition=TYPE_DEFINITIONS[issue_type],
         repo_full_name=repo_full_name,
         title=issue.title,
         body=(issue.body or "")[:MAX_BODY_CHARS] or "(empty)",
