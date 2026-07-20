@@ -39,8 +39,8 @@ export function SuggestionDrawer({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["suggestion", issueId] });
+  const applyResult = (data: Suggestion) => {
+    qc.setQueryData(["suggestion", issueId], data);
     qc.invalidateQueries({ queryKey: ["triage-inbox"] });
   };
 
@@ -51,6 +51,7 @@ export function SuggestionDrawer({
       hasExisting
         ? getJson<Suggestion>(`${base}/${issueId}/suggestion`)
         : sendJson<Suggestion>(`${base}/${issueId}/suggestion`, "POST"),
+    staleTime: Infinity,
   });
 
   const [draft, setDraft] = useState<string | null>(null);
@@ -66,30 +67,30 @@ export function SuggestionDrawer({
   const save = useMutation({
     mutationFn: (proposed_body: string) =>
       sendJson<Suggestion>(`${base}/${issueId}/suggestion`, "PATCH", { proposed_body }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       setDraft(null);
-      invalidate();
+      applyResult(data);
     },
   });
   const setStatus = useMutation({
     mutationFn: (status: "suggested" | "rejected") =>
       sendJson<Suggestion>(`${base}/${issueId}/suggestion`, "PATCH", { status }),
-    onSuccess: (_res, status) => {
-      invalidate();
+    onSuccess: (data, status) => {
+      applyResult(data);
       if (status === "rejected") onClose();
     },
   });
   const regenerate = useMutation({
     mutationFn: () => sendJson<Suggestion>(`${base}/${issueId}/suggestion`, "POST"),
-    onSuccess: () => {
+    onSuccess: (data) => {
       setDraft(null);
-      invalidate();
+      applyResult(data);
     },
   });
   const push = useMutation({
     mutationFn: () =>
       sendJson<Suggestion>(`${base}/${issueId}/suggestion/push`, "POST"),
-    onSuccess: invalidate,
+    onSuccess: (data) => applyResult(data),
   });
 
   if (isPending)
