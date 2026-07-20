@@ -1,6 +1,7 @@
 from typing import Any
 
 from sqlalchemy import Select, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.llm.readiness import RUBRICS
@@ -11,6 +12,7 @@ from app.models import (
     IssueSuggestion,
     Repository,
 )
+from app.triage.scaffold import build_proposed_body
 
 
 def missing_requirements(issue_type: str, factors: list[dict]) -> list[dict[str, str]]:
@@ -71,3 +73,95 @@ async def inbox(
         for issue, full_name, classification, readiness, suggestion in rows
     ]
     return items, total
+
+
+class IssueNotFound(Exception):
+    pass
+
+
+class ReadinessRequired(Exception):
+    pass
+
+
+class SuggestionNotFound(Exception):
+    pass
+
+
+class SuggestionConflict(Exception):
+    pass
+
+
+async def get_suggestion(
+    session: AsyncSession, issue_id: int
+) -> IssueSuggestion | None:
+    return (
+        await session.execute(
+            select(IssueSuggestion).where(IssueSuggestion.issue_id == issue_id)
+        )
+    ).scalar_one_or_none()
+
+
+async def generate_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggestion:
+    row = (
+        await session.execute(
+            select(Issue, IssueReadiness)
+            .join(IssueReadiness, IssueReadiness.issue_id == Issue.id)
+            .where(Issue.id == issue_id)
+        )
+    ).first()
+    if row is None:
+        exists = (
+            await session.execute(select(Issue.id).where(Issue.id == issue_id))
+        ).scalar_one_or_none()
+        if exists is None:
+            raise IssueNotFound()
+        raise ReadinessRequired()
+    issue, readiness = row
+    missing = missing_requirements(readiness.issue_type, readiness.factors)
+    proposed, _applied = build_proposed_body(
+        issue.body or "", [m["id"] for m in missing]
+    )
+    values = {
+        "issue_id": issue_id,
+        "status": "draft",
+        "base_body": issue.body or "",
+        "base_gh_updated_at": issue.gh_updated_at,
+        "proposed_body": proposed,
+        "missing_requirements": missing,
+        "edited": False,
+        "updated_at": func.now(),
+        "pushed_at": None,
+    }
+    await session.execute(
+        pg_insert(IssueSuggestion)
+        .values(**values)
+        .on_conflict_do_update(
+            index_elements=["issue_id"],
+            set_={k: v for k, v in values.items() if k != "issue_id"},
+        )
+    )
+    await session.commit()
+    sug = await get_suggestion(session, issue_id)
+    assert sug is not None
+    return sug
+
+
+async def update_suggestion(
+    session: AsyncSession,
+    issue_id: int,
+    proposed_body: str | None,
+    status: str | None,
+) -> IssueSuggestion:
+    sug = await get_suggestion(session, issue_id)
+    if sug is None:
+        raise SuggestionNotFound()
+    if sug.status == "pushed":
+        raise SuggestionConflict("suggestion has already been pushed")
+    if proposed_body is not None:
+        sug.proposed_body = proposed_body
+        sug.edited = True
+    if status is not None:
+        sug.status = status
+    await session.commit()
+    await session.refresh(sug)
+    return sug

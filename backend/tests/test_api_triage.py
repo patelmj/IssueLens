@@ -66,3 +66,81 @@ async def test_inbox_excludes_unscored_and_unclassified(clean_db, api):
     await seed_classifications()  # classified: 1, 4 ; but no readiness yet
     body = await get_body(api, "/triage/inbox?threshold=100")
     assert body["total"] == 0  # inner join on readiness excludes them
+
+
+async def test_generate_requires_readiness(clean_db, api):
+    await seed_issues()
+    await seed_classifications()  # classified but not scored
+    resp = await api.post("/issues/1/suggestion")
+    assert resp.status_code == 409
+
+
+async def test_generate_missing_issue_404(clean_db, api):
+    resp = await api.post("/issues/999/suggestion")
+    assert resp.status_code == 404
+
+
+async def test_generate_then_get_produces_scaffold_and_diff(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    resp = await api.post("/issues/1/suggestion")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "draft"
+    assert data["edited"] is False
+    assert "## Reproduction Steps" in data["proposed_body"]
+    assert any(o["op"] == "add" for o in data["diff"])
+    assert {"id": "repro_steps", "label": "Reproduction steps"} in data["missing_requirements"]
+    # reload
+    got = await get_body(api, "/issues/1/suggestion")
+    assert got["proposed_body"] == data["proposed_body"]
+
+
+async def test_get_404_when_absent(clean_db, api):
+    await seed_issues()
+    await seed_readiness()
+    resp = await api.get("/issues/1/suggestion")
+    assert resp.status_code == 404
+
+
+async def test_edit_sets_edited_and_rediffs(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+    resp = await api.patch("/issues/1/suggestion", json={"proposed_body": "totally new body"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["edited"] is True
+    assert data["proposed_body"] == "totally new body"
+    assert any(o["op"] == "add" and o["line"] == "totally new body" for o in data["diff"])
+
+
+async def test_save_as_suggestion_and_reject(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+    saved = await api.patch("/issues/1/suggestion", json={"status": "suggested"})
+    assert saved.json()["status"] == "suggested"
+    rejected = await api.patch("/issues/1/suggestion", json={"status": "rejected"})
+    assert rejected.json()["status"] == "rejected"
+
+
+async def test_regenerate_replaces_row_and_resets_edited(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+    await api.patch("/issues/1/suggestion", json={"proposed_body": "edited"})
+    regen = await api.post("/issues/1/suggestion")
+    assert regen.json()["edited"] is False
+    assert "## Reproduction Steps" in regen.json()["proposed_body"]
+
+
+async def test_bad_status_is_422(clean_db, api):
+    await seed_issues()
+    await seed_readiness()
+    resp = await api.patch("/issues/1/suggestion", json={"status": "pushed"})
+    assert resp.status_code == 422  # Literal rejects 'pushed'
