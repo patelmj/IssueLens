@@ -47,7 +47,11 @@ def _inbox_query(repo_id: int | None, issue_type: str | None, threshold: int) ->
         .join(IssueClassification, IssueClassification.issue_id == Issue.id)
         .join(IssueReadiness, IssueReadiness.issue_id == Issue.id)
         .outerjoin(IssueSuggestion, IssueSuggestion.issue_id == Issue.id)
-        .where(Issue.is_pull_request.is_(False), IssueReadiness.score < threshold)
+        .where(
+            Issue.is_pull_request.is_(False),
+            Issue.state == "open",
+            IssueReadiness.score < threshold,
+        )
     )
     if repo_id is not None:
         query = query.where(Issue.repository_id == repo_id)
@@ -129,6 +133,8 @@ async def generate_suggestion(session: AsyncSession, issue_id: int) -> IssueSugg
             raise IssueNotFound()
         raise ReadinessRequired()
     issue, readiness = row
+    if issue.state != "open":
+        raise SuggestionConflict("issue is not open")
     missing = missing_requirements(readiness.issue_type, readiness.factors)
     proposed, _applied = build_proposed_body(
         issue.body or "", [m["id"] for m in missing]
@@ -204,6 +210,8 @@ async def push_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggesti
     sug, issue, repo = row
     if sug.status in ("pushed", "rejected"):
         raise SuggestionConflict(f"suggestion is {sug.status}")
+    if issue.state != "open":
+        raise SuggestionConflict("issue is not open")
 
     path = f"/repos/{repo.full_name}/issues/{issue.number}"
     async with make_http_client() as client:

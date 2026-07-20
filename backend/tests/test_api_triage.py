@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from tests.test_api_issues import (
+    NOW,
     seed_classifications,
     seed_issues,
     seed_readiness,
@@ -317,3 +318,43 @@ async def test_push_404_when_no_suggestion(clean_db, api):
     await seed_issues()
     resp = await api.post("/issues/1/suggestion/push")
     assert resp.status_code == 404
+
+
+async def _seed_closed_issue_scoring():
+    """issue 2 ("Beta feature") is CLOSED per seed_issues(); score it low anyway."""
+    from app.db import get_sessionmaker
+    from app.models import IssueClassification, IssueReadiness
+
+    async with get_sessionmaker()() as session:
+        session.add(
+            IssueClassification(
+                issue_id=2, issue_type="feature", component="api",
+                confidence=0.8, model="test-model",
+                issue_gh_updated_at=NOW - timedelta(days=2),
+            )
+        )
+        session.add(
+            IssueReadiness(
+                issue_id=2, issue_type="feature", score=30, factors=[],
+                model="test-model",
+                issue_gh_updated_at=NOW - timedelta(days=2),
+                classification_scored_at=NOW - timedelta(days=2),
+            )
+        )
+        await session.commit()
+
+
+async def test_inbox_excludes_closed_issues_even_if_scored_low(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await _seed_closed_issue_scoring()
+    body = await get_body(api, "/triage/inbox?threshold=100")
+    assert "Beta feature" not in [i["title"] for i in body["items"]]
+
+
+async def test_generate_409_when_issue_is_closed(clean_db, api):
+    await seed_issues()
+    await _seed_closed_issue_scoring()
+    resp = await api.post("/issues/2/suggestion")
+    assert resp.status_code == 409

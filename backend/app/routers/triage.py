@@ -93,6 +93,8 @@ async def generate(
         raise HTTPException(
             status_code=409, detail="Score the issue's readiness before suggesting fixes"
         )
+    except service.SuggestionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     return _to_out(sug)
 
 
