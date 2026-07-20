@@ -4,6 +4,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Double,
     ForeignKey,
     Index,
     Integer,
@@ -90,6 +91,22 @@ class Issue(Base):
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class IssueClassification(Base):
+    __tablename__ = "issue_classifications"
+
+    issue_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    issue_type: Mapped[str] = mapped_column(Text)
+    component: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float] = mapped_column(Double)
+    model: Mapped[str] = mapped_column(Text)
+    classified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    issue_gh_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class SyncJob(Base):

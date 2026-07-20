@@ -67,8 +67,8 @@ async def clean_db():
     async with get_engine().begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE installations, repositories, issues, sync_jobs "
-                "RESTART IDENTITY CASCADE"
+                "TRUNCATE installations, repositories, issues, issue_classifications, "
+                "sync_jobs RESTART IDENTITY CASCADE"
             )
         )
     yield
