@@ -47,3 +47,25 @@ def test_worker_registers_classification_jobs():
     assert "classify_repository" in names
     cron_names = {job.name for job in worker.WorkerSettings.cron_jobs}
     assert "classify_all_repositories" in cron_names
+
+
+async def test_classify_sweep_enqueues_with_dedupe_key(clean_db, monkeypatch):
+    from app.db import get_sessionmaker
+    from app.models import Installation, Repository
+
+    async with get_sessionmaker()() as session:
+        session.add(Installation(id=42, account_login="patelmj"))
+        await session.flush()
+        session.add(
+            Repository(id=500, installation_id=42, full_name="patelmj/mehova",
+                       owner="patelmj", name="mehova")
+        )
+        await session.commit()
+
+    redis = FakeRedis()
+    result = await worker.classify_all_repositories({"redis": redis})
+
+    assert result == 1
+    assert redis.calls == [
+        (("classify_repository", 500), {"_job_id": "classify-500"})
+    ]

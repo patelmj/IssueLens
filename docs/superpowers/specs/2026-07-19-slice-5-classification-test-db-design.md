@@ -44,7 +44,7 @@ Classification is the first brick of the Triage & Scoring track: it feeds readin
 **docker-compose:** new `ollama` service —
 
 - Image `ollama/ollama`, named volume (e.g. `ollamadata:/root/.ollama`) for model storage.
-- NVIDIA GPU reservation (`deploy.resources.reservations.devices` with `driver: nvidia`) — Docker Desktop/WSL2 passes the RTX 5080 through. If the GPU reservation fails on a given machine, Ollama falls back to CPU (slower but functional).
+- NVIDIA GPU reservation (`deploy.resources.reservations.devices` with `driver: nvidia`) — Docker Desktop/WSL2 passes the RTX 5080 through. If the host lacks the NVIDIA container runtime, the GPU reservation makes the service fail to start — remove the `deploy:` block to run Ollama on CPU (slower but functional).
 - Port `127.0.0.1:11434` published for local debugging.
 - `backend`/`worker` get `ISSUELENS_OLLAMA_URL: http://ollama:11434`.
 

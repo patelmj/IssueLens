@@ -20,7 +20,7 @@ export function Header() {
     ? "—"
     : data.connected_repos === 0
       ? "No repository connected"
-      : `${data.connected_repos} repos · ${data.open_issues} open issues`;
+      : `${data.connected_repos} ${data.connected_repos === 1 ? "repo" : "repos"} · ${data.open_issues} ${data.open_issues === 1 ? "open issue" : "open issues"}`;
 
   return (
     <header className="flex items-center gap-3 border-b border-(--color-border) px-5 py-2.5">

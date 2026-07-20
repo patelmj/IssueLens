@@ -51,7 +51,7 @@ async def reconcile_all_repositories(ctx: dict) -> int:
 
 
 async def classify_all_repositories(ctx: dict) -> int:
-    """Safety net for issues synced while Ollama was down."""
+    """Safety net for issues synced while Ollama was down; enqueues via the dedupe key."""
     from sqlalchemy import select
 
     from app.models import Repository
@@ -61,7 +61,9 @@ async def classify_all_repositories(ctx: dict) -> int:
     done = 0
     for repo_id in repo_ids:
         try:
-            await classify_repository(ctx, repo_id)
+            await ctx["redis"].enqueue_job(
+                "classify_repository", repo_id, _job_id=f"classify-{repo_id}"
+            )
             done += 1
         except Exception:
             logger.exception("classification sweep failed for repo %s", repo_id)
