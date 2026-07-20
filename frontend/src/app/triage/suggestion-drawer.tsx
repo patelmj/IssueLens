@@ -176,7 +176,12 @@ export function SuggestionDrawer({
           type="button"
           className={btn}
           disabled={regenerate.isPending}
-          onClick={() => regenerate.mutate()}
+          onClick={() => {
+            if (locked && !window.confirm("Start a new suggestion? This replaces the pushed record.")) {
+              return;
+            }
+            regenerate.mutate();
+          }}
         >
           Regenerate
         </button>
