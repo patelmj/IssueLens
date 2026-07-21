@@ -1,12 +1,23 @@
 "use client";
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getJson } from "../../../lib/api";
+import { useState } from "react";
+import { getJson, sendJson } from "../../../lib/api";
 import { PlanTabs } from "../plan-tabs";
 import { BoardCard } from "./board-card";
-import { COLUMN_LABEL, type KanbanPayload } from "./board-types";
+import {
+  COLUMN_LABEL,
+  movedPayload,
+  type KanbanPayload,
+  type WorkflowColumn,
+} from "./board-types";
 
 const card =
   "rounded-[14px] border border-(--color-border) bg-(--color-surface) shadow-(--shadow-card)";
@@ -31,6 +42,46 @@ export function BoardClient() {
     queryFn: () => getJson<KanbanPayload>(`/api/backend/repositories/${repoId}/kanban`),
     enabled: repoId != null,
     placeholderData: keepPreviousData,
+  });
+
+  const queryClient = useQueryClient();
+  const [dropTarget, setDropTarget] = useState<WorkflowColumn | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  const moveMutation = useMutation({
+    mutationFn: ({ issueId, column }: { issueId: number; column: WorkflowColumn }) =>
+      sendJson<{ issue_id: number }>(`/api/backend/issues/${issueId}/workflow`, "PUT", {
+        column,
+      }),
+    onMutate: async ({ issueId, column }) => {
+      await queryClient.cancelQueries({ queryKey: kanbanKey });
+      const previous = queryClient.getQueryData<KanbanPayload>(kanbanKey);
+      queryClient.setQueryData<KanbanPayload>(kanbanKey, (old) =>
+        old ? movedPayload(old, issueId, column) : old,
+      );
+      setMoveError(null);
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(kanbanKey, context.previous);
+      setMoveError(err.message);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: kanbanKey }),
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: (issueId: number) =>
+      sendJson<undefined>(`/api/backend/issues/${issueId}/workflow`, "DELETE"),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: kanbanKey });
+      setMoveError(null);
+      return { previous: queryClient.getQueryData<KanbanPayload>(kanbanKey) };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(kanbanKey, context.previous);
+      setMoveError(err.message);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: kanbanKey }),
   });
 
   const columns = data?.columns ?? [];
@@ -64,6 +115,11 @@ export function BoardClient() {
             </option>
           ))}
         </select>
+        {moveError ? (
+          <span className="text-(--color-danger)" data-testid="move-error">
+            {moveError}
+          </span>
+        ) : null}
       </div>
 
       {reposPending || (repoId != null && isPending) ? (
@@ -94,7 +150,9 @@ export function BoardClient() {
                 key={col.key}
                 data-wf-column={col.key}
                 data-testid={`col-${col.key}`}
-                className="flex flex-col gap-2"
+                className={`flex flex-col gap-2 rounded-[10px] transition-all duration-150 ${
+                  dropTarget === col.key ? "bg-(--accent-tint)" : ""
+                }`}
               >
                 <header
                   className={`flex items-baseline justify-between rounded-[10px] border border-(--color-border) px-2.5 py-1.5 ${
@@ -110,7 +168,14 @@ export function BoardClient() {
                 </header>
                 <div className="flex min-h-24 flex-col gap-2">
                   {col.cards.map((c) => (
-                    <BoardCard key={c.issue_id} card={c} />
+                    <BoardCard
+                      key={c.issue_id}
+                      card={c}
+                      column={col.key}
+                      onMove={(issueId, to) => moveMutation.mutate({ issueId, column: to })}
+                      onReset={(issueId) => resetMutation.mutate(issueId)}
+                      onDragTarget={setDropTarget}
+                    />
                   ))}
                 </div>
               </section>

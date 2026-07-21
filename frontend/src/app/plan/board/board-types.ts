@@ -47,3 +47,24 @@ export const BAND_LABEL: Record<
   delegate: "Delegate",
   reconsider: "Reconsider",
 };
+
+/** Optimistically move a card to another column (placed=true, inserted on top). */
+export function movedPayload(
+  payload: KanbanPayload,
+  issueId: number,
+  to: WorkflowColumn,
+): KanbanPayload {
+  let moved: KanbanCard | null = null;
+  const stripped = payload.columns.map((col) => {
+    const found = col.cards.find((c) => c.issue_id === issueId);
+    if (found) moved = { ...found, placed: true };
+    return { ...col, cards: col.cards.filter((c) => c.issue_id !== issueId) };
+  });
+  if (!moved) return payload;
+  return {
+    ...payload,
+    columns: stripped.map((col) =>
+      col.key === to ? { ...col, cards: [moved!, ...col.cards] } : col,
+    ),
+  };
+}

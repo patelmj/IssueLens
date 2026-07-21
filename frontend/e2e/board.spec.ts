@@ -99,3 +99,39 @@ test("plan tabs and sidebar navigate to the board", async ({ page }) => {
   await page.getByTestId("plan-tabs").getByRole("link", { name: "Board" }).click();
   await expect(page.getByTestId("board-content")).toBeVisible();
 });
+
+test("dragging a card to another column sends PUT and persists", async ({ page }) => {
+  const calls = { puts: [] as { issueId: number; body: unknown }[], deletes: [] as number[] };
+  await stubBoard(page, calls);
+  await page.goto("/plan/board");
+  const dragged = page.getByTestId("card-42");
+  await expect(dragged).toBeVisible();
+  const from = (await dragged.boundingBox())!;
+  const target = (await page.getByTestId("col-review").boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + 60, { steps: 10 });
+  await page.mouse.up();
+
+  await expect.poll(() => calls.puts.length).toBe(1);
+  expect(calls.puts[0]).toEqual({ issueId: 1, body: { column: "review" } });
+  await expect(page.getByTestId("col-review")).toContainText("#42");
+  await expect(page.getByTestId("card-placed-42")).toBeVisible();
+});
+
+test("card menu moves and resets placement", async ({ page }) => {
+  const calls = { puts: [] as { issueId: number; body: unknown }[], deletes: [] as number[] };
+  await stubBoard(page, calls);
+  await page.goto("/plan/board");
+  await page.getByTestId("card-menu-43").click();
+  await page.getByTestId("menu-move-43-ready").click();
+  await expect.poll(() => calls.puts.length).toBe(1);
+  expect(calls.puts[0]).toEqual({ issueId: 2, body: { column: "ready" } });
+  await expect(page.getByTestId("col-ready")).toContainText("#43");
+
+  await page.getByTestId("card-menu-43").click();
+  await page.getByTestId("menu-reset-43").click();
+  await expect.poll(() => calls.deletes.length).toBe(1);
+  await expect(page.getByTestId("col-needs_detail")).toContainText("#43");
+  await expect(page.getByTestId("card-placed-43")).not.toBeVisible();
+});
