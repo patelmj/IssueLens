@@ -178,6 +178,18 @@ class IssuePriorityPin(Base):
     )
 
 
+class IssueWorkflow(Base):
+    __tablename__ = "issue_workflow"
+
+    issue_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    wf_column: Mapped[str] = mapped_column(Text)
+    moved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
 
