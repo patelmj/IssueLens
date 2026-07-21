@@ -21,6 +21,14 @@ import {
   type MatrixPayload,
   type PlottedItem,
 } from "./matrix-types";
+import { FilterChips } from "./filter-chips";
+import {
+  applyFilters,
+  filtersToSearch,
+  hasActiveFilters,
+  parseFilters,
+  type MatrixFilters,
+} from "../../../lib/matrix-filters";
 
 const card =
   "rounded-[14px] border border-(--color-border) bg-(--color-surface) shadow-(--shadow-card)";
@@ -40,6 +48,18 @@ export function MatrixClient() {
   const repoParam = searchParams.get("repo_id");
   const repoId = repoParam ? Number(repoParam) : (repos?.[0]?.id ?? null);
   const matrixKey = ["matrix", repoId] as const;
+
+  const filters = parseFilters(searchParams);
+
+  const navigateWith = useCallback(
+    (nextRepoId: number | null, nextFilters: MatrixFilters) => {
+      const search = filtersToSearch(nextRepoId, nextFilters);
+      router.replace(search ? `/plan/matrix?${search}` : "/plan/matrix", {
+        scroll: false,
+      });
+    },
+    [router],
+  );
 
   const { data, error, isPending } = useQuery({
     queryKey: matrixKey,
@@ -113,8 +133,11 @@ export function MatrixClient() {
   });
 
   const items = data?.items ?? [];
-  const plotted = toPlotted(items);
-  const selected = items.find((item) => item.issue_id === selectedId) ?? null;
+  const filtersActive = hasActiveFilters(filters);
+  const filtered = applyFilters(items, filters);
+  const plotted = toPlotted(filtered);
+  const allPlottedCount = toPlotted(items).length;
+  const selected = filtered.find((item) => item.issue_id === selectedId) ?? null;
 
   return (
     <div className="flex flex-col gap-4" data-testid="matrix-content">
@@ -133,10 +156,7 @@ export function MatrixClient() {
           className="rounded-lg border border-(--color-border) bg-(--color-surface) px-2.5 py-1.5"
           value={repoId ?? ""}
           onChange={(e) =>
-            router.replace(
-              e.target.value ? `/plan/matrix?repo_id=${e.target.value}` : "/plan/matrix",
-              { scroll: false },
-            )
+            navigateWith(e.target.value ? Number(e.target.value) : null, filters)
           }
         >
           {(repos ?? []).map((repo) => (
@@ -145,6 +165,15 @@ export function MatrixClient() {
             </option>
           ))}
         </select>
+        <FilterChips
+          filters={filters}
+          onChange={(next) => navigateWith(repoId, next)}
+        />
+        {filtersActive && data ? (
+          <span className="text-(--color-text-muted)" data-testid="filter-count">
+            {plotted.length} of {allPlottedCount} shown
+          </span>
+        ) : null}
         {data && data.unscored > 0 ? (
           <span
             className="rounded-full border border-(--color-border) px-2 py-0.5 text-[10px] text-(--color-text-muted)"
@@ -179,6 +208,25 @@ export function MatrixClient() {
           <Link className="pt-2 text-(--color-primary) hover:underline" href="/repositories">
             Go to Repositories →
           </Link>
+        </div>
+      ) : filtersActive && plotted.length === 0 ? (
+        <div
+          className={`${card} flex flex-col items-center gap-1.5 px-6 py-16 text-center`}
+          data-testid="filter-empty"
+        >
+          <div className="text-sm font-medium">No issues match these filters</div>
+          <div className="text-(--color-text-muted)">
+            {allPlottedCount} scored issue{allPlottedCount === 1 ? "" : "s"} hidden by
+            the current filters.
+          </div>
+          <button
+            type="button"
+            data-testid="clear-filters-empty"
+            className="mt-2 rounded-lg border border-(--color-border) px-2.5 py-1 text-(--color-primary) transition-all duration-150 hover:bg-(--accent-tint)"
+            onClick={() => navigateWith(repoId, { types: [], readiness: null })}
+          >
+            Clear filters
+          </button>
         </div>
       ) : plotted.length === 0 ? (
         <div className={`${card} px-6 py-16 text-center text-(--color-text-muted)`}>
