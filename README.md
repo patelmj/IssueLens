@@ -9,7 +9,8 @@ Product spec: `issuelens_github_issue_dashboard_spec.md`.
 docker compose up --build        # postgres+pgvector, redis, backend :8000, worker, frontend :3005
 ```
 
-Then run migrations once: `cd backend && uv run alembic upgrade head`
+Run migrations after this initial setup and again after every update that adds a new
+migration: `docker exec issuelens-backend-1 sh -c "cd /app && uv run alembic upgrade head"`
 
 The first classification run downloads the local LLM (`qwen3:8b`, ~5 GB) into the
 `ollamadata` volume — watch progress with `docker compose logs -f ollama`. Issue
