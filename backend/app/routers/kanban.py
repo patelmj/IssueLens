@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -135,3 +137,47 @@ async def repository_kanban(
         for key in WORKFLOW_COLUMNS
     ]
     return KanbanOut(columns=columns, total=sum(len(col.cards) for col in columns))
+
+
+WorkflowColumn = Literal["needs_detail", "ready", "in_progress", "review", "blocked", "done"]
+
+
+class WorkflowIn(BaseModel):
+    column: WorkflowColumn
+
+
+class WorkflowOut(BaseModel):
+    issue_id: int
+    column: WorkflowColumn
+    placed: bool
+
+
+@router.put("/issues/{issue_id}/workflow", response_model=WorkflowOut)
+async def place_issue(
+    issue_id: int, body: WorkflowIn, session: AsyncSession = Depends(get_session)
+) -> WorkflowOut:
+    issue = (
+        await session.execute(select(Issue).where(Issue.id == issue_id))
+    ).scalar_one_or_none()
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Unknown issue")
+    values = {"issue_id": issue_id, "wf_column": body.column, "moved_at": func.now()}
+    await session.execute(
+        pg_insert(IssueWorkflow)
+        .values(**values)
+        .on_conflict_do_update(
+            index_elements=["issue_id"],
+            set_={k: v for k, v in values.items() if k != "issue_id"},
+        )
+    )
+    await session.commit()
+    return WorkflowOut(issue_id=issue_id, column=body.column, placed=True)
+
+
+@router.delete("/issues/{issue_id}/workflow", status_code=204)
+async def reset_issue_workflow(
+    issue_id: int, session: AsyncSession = Depends(get_session)
+) -> Response:
+    await session.execute(delete(IssueWorkflow).where(IssueWorkflow.issue_id == issue_id))
+    await session.commit()
+    return Response(status_code=204)

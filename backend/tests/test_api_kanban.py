@@ -142,3 +142,37 @@ async def test_kanban_sorts_scored_first(client, clean_db):
 async def test_kanban_unknown_repo_404(client, clean_db):
     resp = await client.get("/repositories/999/kanban")
     assert resp.status_code == 404
+
+
+async def test_workflow_place_move_and_reset(client, clean_db):
+    async with get_sessionmaker()() as session:
+        await seed(session)
+
+    resp = await client.put("/issues/1/workflow", json={"column": "ready"})
+    assert resp.status_code == 200
+    assert resp.json() == {"issue_id": 1, "column": "ready", "placed": True}
+    cols = cards_by_column((await client.get("/repositories/500/kanban")).json())
+    assert 10 in [c["number"] for c in cols["ready"]]
+
+    resp = await client.put("/issues/1/workflow", json={"column": "blocked"})
+    assert resp.status_code == 200
+    cols = cards_by_column((await client.get("/repositories/500/kanban")).json())
+    assert 10 in [c["number"] for c in cols["blocked"]]
+
+    resp = await client.delete("/issues/1/workflow")
+    assert resp.status_code == 204
+    resp = await client.delete("/issues/1/workflow")  # idempotent
+    assert resp.status_code == 204
+    cols = cards_by_column((await client.get("/repositories/500/kanban")).json())
+    assert 10 in [c["number"] for c in cols["needs_detail"]]  # back to derived
+
+
+async def test_workflow_validation(client, clean_db):
+    async with get_sessionmaker()() as session:
+        await seed(session)
+    assert (
+        await client.put("/issues/999/workflow", json={"column": "ready"})
+    ).status_code == 404
+    assert (
+        await client.put("/issues/1/workflow", json={"column": "parked"})
+    ).status_code == 422
