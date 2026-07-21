@@ -53,7 +53,7 @@ export function BoardCard({ card, column, onMove, onReset, onDragTarget }: Board
     <article
       data-testid={`card-${card.number}`}
       tabIndex={0}
-      className={`relative flex touch-none flex-col gap-1 rounded-[10px] border border-(--color-border) bg-(--color-surface) p-2.5 shadow-(--shadow-card) ${
+      className={`relative flex touch-none select-none flex-col gap-1 rounded-[10px] border border-(--color-border) bg-(--color-surface) p-2.5 shadow-(--shadow-card) ${
         dragging ? "opacity-60" : ""
       }`}
       onPointerDown={(e) => {
