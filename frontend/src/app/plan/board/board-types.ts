@@ -68,3 +68,39 @@ export function movedPayload(
     ),
   };
 }
+
+export type LaneBy = "none" | "component" | "assignee";
+
+export const FALLBACK_LANE: Record<Exclude<LaneBy, "none">, string> = {
+  component: "Uncategorized",
+  assignee: "Unassigned",
+};
+
+function laneKeyOf(card: KanbanCard, laneBy: Exclude<LaneBy, "none">): string {
+  if (laneBy === "component") return card.component ?? FALLBACK_LANE.component;
+  return card.assignees[0] ?? FALLBACK_LANE.assignee;
+}
+
+/** Split the payload into swimlanes; a single unnamed lane when laneBy is "none". */
+export function lanesFor(
+  payload: KanbanPayload,
+  laneBy: LaneBy,
+): { lane: string; columns: KanbanColumn[] }[] {
+  if (laneBy === "none") return [{ lane: "", columns: payload.columns }];
+  const fallback = FALLBACK_LANE[laneBy];
+  const names = new Set<string>();
+  for (const col of payload.columns) {
+    for (const c of col.cards) names.add(laneKeyOf(c, laneBy));
+  }
+  const ordered = [
+    ...[...names].filter((n) => n !== fallback).sort((a, b) => a.localeCompare(b)),
+    ...(names.has(fallback) ? [fallback] : []),
+  ];
+  return ordered.map((lane) => ({
+    lane,
+    columns: payload.columns.map((col) => ({
+      ...col,
+      cards: col.cards.filter((c) => laneKeyOf(c, laneBy) === lane),
+    })),
+  }));
+}

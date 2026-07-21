@@ -135,3 +135,23 @@ test("card menu moves and resets placement", async ({ page }) => {
   await expect(page.getByTestId("col-needs_detail")).toContainText("#43");
   await expect(page.getByTestId("card-placed-43")).not.toBeVisible();
 });
+
+test("lane-by component groups cards into swimlanes with fallback last", async ({ page }) => {
+  await stubBoard(page);
+  await page.goto("/plan/board");
+  await page.getByTestId("lane-by").getByRole("button", { name: "Component" }).click();
+  const lanes = page.getByTestId(/^swimlane-/);
+  await expect(lanes).toHaveCount(2);
+  await expect(page.getByTestId("swimlane-auth")).toContainText("#42");
+  await expect(page.getByTestId("swimlane-auth")).toContainText("#44");
+  await expect(page.getByTestId("swimlane-Uncategorized")).toContainText("#43");
+  // fallback lane renders last
+  await expect(lanes.last()).toHaveAttribute("data-testid", "swimlane-Uncategorized");
+
+  await page.getByTestId("lane-by").getByRole("button", { name: "Assignee" }).click();
+  await expect(page.getByTestId("swimlane-patelmj")).toContainText("#42");
+  await expect(page.getByTestId("swimlane-Unassigned")).toContainText("#43");
+
+  await page.getByTestId("lane-by").getByRole("button", { name: "None" }).click();
+  await expect(page.getByTestId(/^swimlane-/)).toHaveCount(1);
+});
