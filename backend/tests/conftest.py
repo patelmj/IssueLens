@@ -69,7 +69,7 @@ async def clean_db():
             text(
                 "TRUNCATE installations, repositories, issues, issue_classifications, "
                 "issue_readiness, issue_priority, issue_priority_pins, issue_workflow, "
-                "sync_jobs RESTART IDENTITY CASCADE"
+                "saved_views, sync_jobs RESTART IDENTITY CASCADE"
             )
         )
     yield
