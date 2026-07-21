@@ -1,7 +1,9 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { fetchViews, savedViewHref, VIEWS_KEY } from "../lib/views";
 
 export const NAV_ITEMS = [
   {
@@ -30,8 +32,27 @@ export const NAV_ITEMS = [
   },
 ];
 
+const childLink = (active: boolean) =>
+  `flex items-center rounded-lg py-1.5 pl-7 transition-all duration-150 ${
+    active
+      ? "bg-(--accent-tint) font-medium text-(--color-primary)"
+      : "text-(--color-text-muted) hover:bg-(--accent-tint) hover:text-(--color-text)"
+  }`;
+
 export function Sidenav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
+  const currentUrl = search ? `${pathname}?${search}` : pathname;
+
+  const { data: views } = useQuery({
+    queryKey: VIEWS_KEY,
+    queryFn: fetchViews,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const matrixViews = (views ?? []).filter((view) => view.view_kind === "matrix");
+
   return (
     <nav aria-label="Primary" className="flex flex-col gap-5 py-1">
       {NAV_ITEMS.map(({ group, items }) => (
@@ -58,26 +79,40 @@ export function Sidenav() {
                     }`}
                   >
                     <span>{label}</span>
-                    <span className="rounded-full border border-(--color-border) px-1.5 text-[10px] text-(--color-text-muted)">
-                      –
+                    <span
+                      className="rounded-full border border-(--color-border) px-1.5 text-[10px] text-(--color-text-muted)"
+                      data-testid={href === "/views" ? "views-count" : undefined}
+                    >
+                      {href === "/views" && views ? views.length : "–"}
                     </span>
                   </Link>
                   {children ? (
                     <ul className="mt-0.5 flex flex-col gap-0.5">
-                      {children.map((child) => {
-                        const childActive = pathname === child.href;
+                      {children.map((child) => (
+                        <li key={child.href}>
+                          <Link
+                            href={child.href}
+                            aria-current={pathname === child.href ? "page" : undefined}
+                            className={childLink(pathname === child.href)}
+                          >
+                            {child.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {href === "/views" && matrixViews.length > 0 ? (
+                    <ul className="mt-0.5 flex flex-col gap-0.5">
+                      {matrixViews.map((view) => {
+                        const viewHref = savedViewHref(view);
                         return (
-                          <li key={child.href}>
+                          <li key={view.id}>
                             <Link
-                              href={child.href}
-                              aria-current={childActive ? "page" : undefined}
-                              className={`flex items-center rounded-lg py-1.5 pl-7 transition-all duration-150 ${
-                                childActive
-                                  ? "bg-(--accent-tint) font-medium text-(--color-primary)"
-                                  : "text-(--color-text-muted) hover:bg-(--accent-tint) hover:text-(--color-text)"
-                              }`}
+                              href={viewHref}
+                              data-testid={`saved-view-link-${view.id}`}
+                              className={childLink(currentUrl === viewHref)}
                             >
-                              {child.label}
+                              {view.name}
                             </Link>
                           </li>
                         );
