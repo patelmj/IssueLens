@@ -9,8 +9,8 @@ Product spec: `issuelens_github_issue_dashboard_spec.md`.
 docker compose up --build        # postgres+pgvector, redis, backend :8000, worker, frontend :3005
 ```
 
-Run migrations after this initial setup and again after every update that adds a new
-migration: `docker exec issuelens-backend-1 sh -c "cd /app && uv run alembic upgrade head"`
+Migrations run automatically on every `docker compose up`: the one-shot `migrate`
+service applies `alembic upgrade head` before the backend and worker start.
 
 The first classification run downloads the local LLM (`qwen3:8b`, ~5 GB) into the
 `ollamadata` volume — watch progress with `docker compose logs -f ollama`. Issue
@@ -73,7 +73,7 @@ cd frontend && npm run dev:local     # clears .next, runs next dev on the host
 ## Tests
 
 ```sh
-# Backend (needs: docker compose up -d postgres redis worker; migrations at head)
+# Backend (needs: docker compose up -d postgres redis worker — migrations apply automatically)
 cd backend && uv run pytest -v
 
 # Frontend lint + types
