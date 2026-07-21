@@ -22,6 +22,7 @@ import {
   type PlottedItem,
 } from "./matrix-types";
 import { FilterChips } from "./filter-chips";
+import { SaveViewButton } from "./save-view";
 import {
   applyFilters,
   filtersToSearch,
@@ -174,6 +175,7 @@ export function MatrixClient() {
             {plotted.length} of {allPlottedCount} shown
           </span>
         ) : null}
+        <SaveViewButton repoId={repoId} filters={filters} />
         {data && data.unscored > 0 ? (
           <span
             className="rounded-full border border-(--color-border) px-2 py-0.5 text-[10px] text-(--color-text-muted)"
