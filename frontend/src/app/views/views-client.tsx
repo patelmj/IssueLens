@@ -169,14 +169,17 @@ export function ViewsClient() {
               <button
                 type="button"
                 data-testid={`view-delete-${view.id}`}
-                className={`rounded-lg border px-2.5 py-1 transition-all duration-150 ${
+                disabled={deleteMutation.isPending && confirmDeleteId === view.id}
+                className={`rounded-lg border px-2.5 py-1 transition-all duration-150 disabled:opacity-60 ${
                   confirmDeleteId === view.id
                     ? "border-(--color-danger) text-(--color-danger)"
                     : "border-(--color-border) text-(--color-text-muted) hover:text-(--color-text)"
                 }`}
                 onClick={() => {
                   if (confirmDeleteId === view.id) {
-                    deleteMutation.mutate(view.id);
+                    if (!deleteMutation.isPending) {
+                      deleteMutation.mutate(view.id);
+                    }
                   } else {
                     setConfirmDeleteId(view.id);
                     setRenamingId(null);
