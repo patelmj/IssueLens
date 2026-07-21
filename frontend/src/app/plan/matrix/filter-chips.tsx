@@ -69,9 +69,9 @@ export function FilterChips({
   };
 
   const typeLabel =
-    filters.types.length === 0
+    localTypes.length === 0
       ? "Type: All"
-      : `Type: ${filters.types.map((t) => TYPE_LABEL[t]).join(", ")}`;
+      : `Type: ${localTypes.map((t) => TYPE_LABEL[t]).join(", ")}`;
   const readinessLabel = filters.readiness
     ? `Readiness: ${READINESS_BUCKETS[filters.readiness].label}`
     : "Readiness: Any";
@@ -83,7 +83,7 @@ export function FilterChips({
           type="button"
           data-testid="type-chip"
           aria-expanded={openPanel === "type"}
-          className={`${chipBase} ${filters.types.length ? chipActive : chipIdle}`}
+          className={`${chipBase} ${localTypes.length ? chipActive : chipIdle}`}
           onClick={() => setOpenPanel(openPanel === "type" ? null : "type")}
         >
           {typeLabel}
@@ -157,7 +157,10 @@ export function FilterChips({
           type="button"
           data-testid="clear-filters"
           className="text-(--color-text-muted) transition-all duration-150 hover:text-(--color-text)"
-          onClick={() => onChange(NO_FILTERS)}
+          onClick={() => {
+            setLocalTypes([]);
+            onChange(NO_FILTERS);
+          }}
         >
           Clear filters
         </button>
