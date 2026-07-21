@@ -15,6 +15,7 @@ export const NAV_ITEMS = [
         children: [
           { label: "Table", href: "/plan" },
           { label: "Matrix", href: "/plan/matrix" },
+          { label: "Board", href: "/plan/board" },
         ],
       },
       { label: "Analyze", href: "/analyze" },
