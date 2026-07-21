@@ -6,6 +6,7 @@ const ROUTES = [
   { link: "Plan", href: "/plan", h1: "Plan" },
   { link: "Table", href: "/plan", h1: "Plan" },
   { link: "Matrix", href: "/plan/matrix", h1: "Plan" },
+  { link: "Board", href: "/plan/board", h1: "Plan" },
   { link: "Analyze", href: "/analyze", h1: "Analyze" },
   { link: "Saved Views", href: "/views", h1: "Saved Views" },
   { link: "Repositories", href: "/repositories", h1: "Repositories" },
