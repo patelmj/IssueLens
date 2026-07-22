@@ -9,6 +9,7 @@ import {
   type PlottedItem,
   type Quadrant,
 } from "./matrix-types";
+import { PinGlyph } from "./pin-glyph";
 
 const GROUP_ORDER: Quadrant[] = ["dofirst", "schedule", "delegate", "reconsider"];
 
@@ -16,10 +17,12 @@ export function ExecutionQueue({
   plotted,
   selectedId,
   onSelect,
+  onRelease,
 }: {
   plotted: PlottedItem[];
   selectedId: number | null;
   onSelect: (id: number | null) => void;
+  onRelease: (issueId: number) => void;
 }) {
   // rank signature per issue: "<quadrant>:<index>" — change triggers the flash
   const prevRanks = useRef<Map<number, string>>(new Map());
@@ -76,7 +79,7 @@ export function ExecutionQueue({
             </div>
             <ul className="flex flex-col">
               {items.map((item, index) => (
-                <li key={item.issue_id}>
+                <li key={item.issue_id} className="flex items-center">
                   <button
                     type="button"
                     data-qrow-id={item.issue_id}
@@ -84,7 +87,7 @@ export function ExecutionQueue({
                     onClick={() =>
                       onSelect(selectedId === item.issue_id ? null : item.issue_id)
                     }
-                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-150 ${
+                    className={`flex min-w-0 grow items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-150 ${
                       flashIds.current.has(item.issue_id) ? "qrow-flash" : ""
                     } ${
                       selectedId === item.issue_id
@@ -106,8 +109,23 @@ export function ExecutionQueue({
                     <span className="text-(--color-text-muted) tabular-nums">
                       {Math.round(item.u + item.i)}
                     </span>
-                    {item.pinned ? <span aria-label="pinned">📌</span> : null}
+                    {item.pinned ? (
+                      <span role="img" aria-label="pinned">
+                        <PinGlyph className="h-3 w-3 shrink-0" />
+                      </span>
+                    ) : null}
                   </button>
+                  {item.pinned ? (
+                    <button
+                      type="button"
+                      data-testid={`qrow-release-${item.number}`}
+                      aria-label={`Release #${item.number} to AI`}
+                      className="shrink-0 rounded px-1 text-(--color-text-muted) opacity-60 transition-all duration-150 hover:text-(--color-danger) hover:opacity-100"
+                      onClick={() => onRelease(item.issue_id)}
+                    >
+                      ✕
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>

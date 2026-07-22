@@ -25,11 +25,14 @@
   --pm-feature: #008300;
   --pm-debt: #e87ba4;
   --pm-other: #eda100;
-  --quad-schedule: rgba(42, 120, 214, 0.05);
-  --quad-dofirst: rgba(209, 36, 47, 0.05);
-  --quad-delegate: rgba(27, 124, 131, 0.05);
-  --quad-reconsider: rgba(110, 112, 118, 0.05);
-  --pin-ring: #17181c;
+  --quad-schedule-strong: rgba(42, 120, 214, 0.13);
+  --quad-dofirst-strong: rgba(209, 36, 47, 0.13);
+  --quad-delegate-strong: rgba(27, 124, 131, 0.13);
+  --quad-reconsider-strong: rgba(110, 112, 118, 0.13);
+  --quad-schedule-label: rgba(42, 120, 214, 0.9);
+  --quad-dofirst-label: rgba(209, 36, 47, 0.9);
+  --quad-delegate-label: rgba(27, 124, 131, 0.9);
+  --quad-reconsider-label: rgba(110, 112, 118, 0.9);
 }
 
 :root[data-mode="dark"] {
@@ -55,11 +58,14 @@
   --pm-feature: #008300;
   --pm-debt: #d55181;
   --pm-other: #c98500;
-  --quad-schedule: rgba(57, 135, 229, 0.1);
-  --quad-dofirst: rgba(244, 112, 103, 0.1);
-  --quad-delegate: rgba(57, 197, 207, 0.1);
-  --quad-reconsider: rgba(150, 152, 161, 0.1);
-  --pin-ring: #ededf0;
+  --quad-schedule-strong: rgba(57, 135, 229, 0.26);
+  --quad-dofirst-strong: rgba(244, 112, 103, 0.26);
+  --quad-delegate-strong: rgba(57, 197, 207, 0.26);
+  --quad-reconsider-strong: rgba(150, 152, 161, 0.26);
+  --quad-schedule-label: rgba(57, 135, 229, 0.9);
+  --quad-dofirst-label: rgba(244, 112, 103, 0.9);
+  --quad-delegate-label: rgba(57, 197, 207, 0.9);
+  --quad-reconsider-label: rgba(150, 152, 161, 0.9);
 }
 
 body {
@@ -81,5 +87,36 @@ body {
   }
   100% {
     background: transparent;
+  }
+}
+
+.matrix-washes {
+  animation: matrix-fade-in 0.5s ease both;
+}
+.matrix-bubble {
+  animation: matrix-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(200ms + var(--pop-delay, 0ms));
+}
+@keyframes matrix-fade-in {
+  0% {
+    opacity: 0;
+  }
+}
+@keyframes matrix-pop {
+  0% {
+    opacity: 0;
+    scale: 0;
+  }
+}
+.matrix-bubble {
+  transition: transform 120ms ease;
+}
+.matrix-bubble-dragging {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .matrix-washes,
+  .matrix-bubble {
+    animation: none;
   }
 }

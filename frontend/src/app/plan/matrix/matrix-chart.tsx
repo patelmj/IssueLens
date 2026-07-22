@@ -1,28 +1,17 @@
 "use client";
 
-import { useRef, useState, type PointerEvent } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { iAt, PLOT, radiusOf, resolveCollisions, uAt, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
 import {
   SERIES_VAR,
   seriesOf,
   type PlottedItem,
 } from "./matrix-types";
+import { PinGlyph } from "./pin-glyph";
 
-export const VIEW_W = 860;
-export const VIEW_H = 560;
-export const PLOT = { left: 52, right: 842, top: 18, bottom: 514 };
 const PLOT_W = PLOT.right - PLOT.left; // 790
 const PLOT_H = PLOT.bottom - PLOT.top; // 496
 const DRAG_THRESHOLD_PX = 3;
-
-export function xOf(u: number): number {
-  return PLOT.left + (u / 100) * PLOT_W;
-}
-export function yOf(i: number): number {
-  return PLOT.bottom - (i / 100) * PLOT_H;
-}
-export function radiusOf(estimate: number): number {
-  return 8 + estimate * 2.1;
-}
 
 type DragState = {
   issueId: number;
@@ -33,11 +22,11 @@ type DragState = {
   i: number;
 };
 
-const QUADRANT_RECTS = [
-  { x: PLOT.left, y: PLOT.top, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-schedule)", label: "SCHEDULE", lx: PLOT.left + 12, ly: PLOT.top + 20 },
-  { x: PLOT.left + PLOT_W / 2, y: PLOT.top, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-dofirst)", label: "DO FIRST", lx: PLOT.right - 12, ly: PLOT.top + 20, anchor: "end" as const },
-  { x: PLOT.left + PLOT_W / 2, y: PLOT.top + PLOT_H / 2, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-delegate)", label: "DELEGATE / QUICK WINS", lx: PLOT.right - 12, ly: PLOT.bottom - 10, anchor: "end" as const },
-  { x: PLOT.left, y: PLOT.top + PLOT_H / 2, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-reconsider)", label: "RECONSIDER", lx: PLOT.left + 12, ly: PLOT.bottom - 10 },
+const QUADRANTS = [
+  { key: "schedule", x: PLOT.left, y: PLOT.top, cornerX: 0, cornerY: 0, label: "SCHEDULE", lx: PLOT.left + 12, ly: PLOT.top + 20 },
+  { key: "dofirst", x: PLOT.left + PLOT_W / 2, y: PLOT.top, cornerX: 1, cornerY: 0, label: "DO FIRST", lx: PLOT.right - 12, ly: PLOT.top + 20, anchor: "end" as const },
+  { key: "delegate", x: PLOT.left + PLOT_W / 2, y: PLOT.top + PLOT_H / 2, cornerX: 1, cornerY: 1, label: "DELEGATE / QUICK WINS", lx: PLOT.right - 12, ly: PLOT.bottom - 10, anchor: "end" as const },
+  { key: "reconsider", x: PLOT.left, y: PLOT.top + PLOT_H / 2, cornerX: 0, cornerY: 1, label: "RECONSIDER", lx: PLOT.left + 12, ly: PLOT.bottom - 10 },
 ];
 
 export function MatrixChart({
@@ -55,13 +44,26 @@ export function MatrixChart({
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const layoutInput = useMemo(() => {
+    if (!drag?.moved) return plotted;
+    return plotted.map((item) =>
+      item.issue_id === drag.issueId
+        ? { ...item, u: drag.u, i: drag.i, pinned: true }
+        : item,
+    );
+  }, [plotted, drag]);
+  const nudges = useMemo(() => resolveCollisions(layoutInput), [layoutInput]);
+  const popRank = useMemo(() => {
+    const order = [...plotted].sort((a, b) => b.u + b.i - (a.u + a.i));
+    return new Map(order.map((item, index) => [item.issue_id, index]));
+  }, [plotted]);
 
   const clientToChart = (e: PointerEvent): { u: number; i: number } => {
     const rect = svgRef.current!.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * VIEW_W;
     const y = ((e.clientY - rect.top) / rect.height) * VIEW_H;
-    const u = Math.max(0, Math.min(100, ((x - PLOT.left) / PLOT_W) * 100));
-    const i = Math.max(0, Math.min(100, ((PLOT.bottom - y) / PLOT_H) * 100));
+    const u = uAt(x);
+    const i = iAt(y);
     return { u, i };
   };
 
@@ -113,26 +115,45 @@ export function MatrixChart({
         aria-label="Priority matrix: urgency by importance. Bubbles are focusable; press Enter to select."
         data-testid="matrix-chart"
       >
-        {QUADRANT_RECTS.map((q) => (
-          <g key={q.label}>
-            <rect x={q.x} y={q.y} width={q.w} height={q.h} fill={q.fill} />
-            <text
-              x={q.lx}
-              y={q.ly}
-              textAnchor={q.anchor ?? "start"}
-              fill="var(--color-text-muted)"
-              fontSize="11"
-              fontWeight="600"
-              letterSpacing="0.08em"
+        <defs>
+          {QUADRANTS.map((q) => (
+            <radialGradient
+              key={q.key}
+              id={`quad-grad-${q.key}`}
+              cx={q.cornerX}
+              cy={q.cornerY}
+              r={1.15}
             >
-              {q.label}
-            </text>
-          </g>
-        ))}
+              <stop offset="0" stopColor={`var(--quad-${q.key}-strong)`} />
+              <stop offset="1" stopColor={`var(--quad-${q.key}-strong)`} stopOpacity={0} />
+            </radialGradient>
+          ))}
+          <filter id="select-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="3.2" />
+          </filter>
+        </defs>
+        <g className="matrix-washes">
+          {QUADRANTS.map((q) => (
+            <g key={q.label}>
+              <rect x={q.x} y={q.y} width={PLOT_W / 2} height={PLOT_H / 2} fill={`url(#quad-grad-${q.key})`} />
+              <text
+                x={q.lx}
+                y={q.ly}
+                textAnchor={q.anchor ?? "start"}
+                fill={`var(--quad-${q.key}-label)`}
+                fontSize="11"
+                fontWeight="600"
+                letterSpacing="0.08em"
+              >
+                {q.label}
+              </text>
+            </g>
+          ))}
+        </g>
 
         {/* grid + axes */}
-        <line x1={PLOT.left} y1={PLOT.top + PLOT_H / 2} x2={PLOT.right} y2={PLOT.top + PLOT_H / 2} stroke="var(--chart-grid)" />
-        <line x1={PLOT.left + PLOT_W / 2} y1={PLOT.top} x2={PLOT.left + PLOT_W / 2} y2={PLOT.bottom} stroke="var(--chart-grid)" />
+        <line x1={PLOT.left} y1={PLOT.top + PLOT_H / 2} x2={PLOT.right} y2={PLOT.top + PLOT_H / 2} stroke="var(--chart-grid)" strokeDasharray="3 3" />
+        <line x1={PLOT.left + PLOT_W / 2} y1={PLOT.top} x2={PLOT.left + PLOT_W / 2} y2={PLOT.bottom} stroke="var(--chart-grid)" strokeDasharray="3 3" />
         <line x1={PLOT.left} y1={PLOT.bottom} x2={PLOT.right} y2={PLOT.bottom} stroke="var(--chart-axis)" />
         <line x1={PLOT.left} y1={PLOT.top} x2={PLOT.left} y2={PLOT.bottom} stroke="var(--chart-axis)" />
         {[0, 50, 100].map((tick) => (
@@ -148,16 +169,21 @@ export function MatrixChart({
         <text x={PLOT.right} y={VIEW_H - 6} textAnchor="end" fill="var(--color-text-muted)" fontSize="11">
           Urgency →
         </text>
-        <text x={14} y={PLOT.top + 10} fill="var(--color-text-muted)" fontSize="11">
-          Importance ↑
+        <text
+          transform={`translate(14 ${PLOT.bottom}) rotate(-90)`}
+          fill="var(--color-text-muted)"
+          fontSize="11"
+        >
+          Importance →
         </text>
 
         {plotted.map((item) => {
           const dragging = drag?.issueId === item.issue_id && drag.moved;
           const u = dragging ? drag.u : item.u;
           const i = dragging ? drag.i : item.i;
-          const cx = xOf(u);
-          const cy = yOf(i);
+          const nudge = dragging ? undefined : nudges.get(item.issue_id);
+          const cx = xOf(u) + (nudge?.dx ?? 0);
+          const cy = yOf(i) + (nudge?.dy ?? 0);
           const r = radiusOf(item.estimate);
           const color = SERIES_VAR[seriesOf(item)];
           const isSelected = selectedId === item.issue_id;
@@ -165,7 +191,12 @@ export function MatrixChart({
             <g
               key={item.issue_id}
               data-testid={`bubble-${item.number}`}
-              className="cursor-grab"
+              className={`matrix-bubble cursor-grab${dragging ? " matrix-bubble-dragging" : ""}`}
+              style={{
+                transform: `translate(${cx}px, ${cy}px)`,
+                transformOrigin: `${cx}px ${cy}px`,
+                "--pop-delay": `${Math.min((popRank.get(item.issue_id) ?? 0) * 70, 1400)}ms`,
+              } as CSSProperties}
               role="button"
               tabIndex={0}
               aria-label={`Issue #${item.number}: ${item.title}`}
@@ -183,42 +214,53 @@ export function MatrixChart({
                 }
               }}
             >
-              {item.pinned ? (
+              {isSelected ? (
                 <circle
-                  data-testid={`pin-ring-${item.number}`}
-                  cx={cx}
-                  cy={cy}
-                  r={r + 5}
+                  cx={0}
+                  cy={0}
+                  r={r + 1}
                   fill="none"
-                  stroke="var(--pin-ring)"
-                  strokeDasharray="4 3"
+                  stroke="var(--color-primary)"
+                  strokeWidth={5}
+                  opacity={0.35}
+                  filter="url(#select-glow)"
                 />
               ) : null}
-              {isSelected ? (
-                <circle cx={cx} cy={cy} r={r + 9} fill="none" stroke="var(--color-primary)" strokeWidth="1.5" />
-              ) : null}
               <circle
-                cx={cx}
-                cy={cy}
+                cx={0}
+                cy={0}
                 r={r}
                 fill={color}
-                stroke="var(--color-surface)"
-                strokeWidth="2"
+                fillOpacity={0.85}
+                stroke={color}
+                strokeWidth={1.5}
               />
               <text
-                x={cx}
-                y={cy + 3.5}
+                x={0}
+                y={3.5}
                 textAnchor="middle"
                 fontSize={Math.max(8.5, Math.min(11, r * 0.85))}
                 fontWeight="500"
                 fill="var(--color-text)"
                 stroke="var(--color-surface)"
-                strokeWidth="2"
+                strokeWidth="1.5"
                 paintOrder="stroke"
                 style={{ fontVariantNumeric: "tabular-nums", pointerEvents: "none" }}
               >
                 {item.number}
               </text>
+              {item.pinned ? (
+                <g
+                  data-testid={`pin-badge-${item.number}`}
+                  transform={`translate(${r * 0.72} ${-r * 0.72})`}
+                >
+                  <circle r={5.5} fill="var(--color-primary)" stroke="var(--color-surface)" strokeWidth={1.2} />
+                  <g transform="rotate(45)">
+                    <line y1={0.6} y2={3.4} stroke="#fff" strokeWidth={1.2} />
+                    <circle cy={-1.2} r={1.9} fill="#fff" />
+                  </g>
+                </g>
+              ) : null}
             </g>
           );
         })}
@@ -235,7 +277,9 @@ export function MatrixChart({
           </span>
         ))}
         <span className="grow" />
-        <span className="text-(--color-text-muted)">size = effort · dashed ring = pinned</span>
+        <span className="flex items-center gap-1 text-(--color-text-muted)">
+          size = effort · <PinGlyph className="inline-block h-3 w-3" /> = pinned
+        </span>
       </div>
     </div>
   );
