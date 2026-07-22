@@ -1,8 +1,11 @@
 import { expect, test } from "@playwright/test";
 import {
+  iAt,
   PLOT,
+  PLOT_PAD,
   radiusOf,
   resolveCollisions,
+  uAt,
   xOf,
   yOf,
 } from "../src/app/plan/matrix/matrix-layout";
@@ -93,8 +96,19 @@ test("nudged centers never cross the midlines of their true quadrant", () => {
     const y = yOf(it.i) + n.dy;
     expect(x).toBeGreaterThanOrEqual(midX);
     expect(y).toBeLessThanOrEqual(midY); // higher importance = smaller y
-    expect(x).toBeLessThanOrEqual(PLOT.right);
-    expect(y).toBeGreaterThanOrEqual(PLOT.top);
+    expect(x).toBeLessThanOrEqual(xOf(100));
+    expect(y).toBeGreaterThanOrEqual(yOf(100));
+  }
+});
+
+test("value mapping insets bubbles clear of the plot rect corners", () => {
+  expect(xOf(0)).toBe(PLOT.left + PLOT_PAD);
+  expect(xOf(100)).toBe(PLOT.right - PLOT_PAD);
+  expect(yOf(0)).toBe(PLOT.bottom - PLOT_PAD);
+  expect(yOf(100)).toBe(PLOT.top + PLOT_PAD);
+  for (const v of [0, 37.5, 50, 100]) {
+    expect(uAt(xOf(v))).toBeCloseTo(v);
+    expect(iAt(yOf(v))).toBeCloseTo(v);
   }
 });
 

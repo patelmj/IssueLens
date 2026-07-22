@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
-import { PLOT, radiusOf, resolveCollisions, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
+import { iAt, PLOT, radiusOf, resolveCollisions, uAt, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
 import {
   SERIES_VAR,
   seriesOf,
@@ -62,8 +62,8 @@ export function MatrixChart({
     const rect = svgRef.current!.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * VIEW_W;
     const y = ((e.clientY - rect.top) / rect.height) * VIEW_H;
-    const u = Math.max(0, Math.min(100, ((x - PLOT.left) / PLOT_W) * 100));
-    const i = Math.max(0, Math.min(100, ((PLOT.bottom - y) / PLOT_H) * 100));
+    const u = uAt(x);
+    const i = iAt(y);
     return { u, i };
   };
 

@@ -3,14 +3,26 @@ import { quadrantOf, type PlottedItem } from "./matrix-types";
 export const VIEW_W = 860;
 export const VIEW_H = 560;
 export const PLOT = { left: 52, right: 842, top: 18, bottom: 514 };
+/** Inner padding of the value→pixel mapping: bubbles plot inside this margin so
+ *  extreme scores stay clear of the corner quadrant labels. Washes/labels/axes
+ *  still use the full PLOT rect. */
+export const PLOT_PAD = 34;
 const PLOT_W = PLOT.right - PLOT.left; // 790
 const PLOT_H = PLOT.bottom - PLOT.top; // 496
+const MAP_W = PLOT_W - 2 * PLOT_PAD;
+const MAP_H = PLOT_H - 2 * PLOT_PAD;
 
 export function xOf(u: number): number {
-  return PLOT.left + (u / 100) * PLOT_W;
+  return PLOT.left + PLOT_PAD + (u / 100) * MAP_W;
 }
 export function yOf(i: number): number {
-  return PLOT.bottom - (i / 100) * PLOT_H;
+  return PLOT.bottom - PLOT_PAD - (i / 100) * MAP_H;
+}
+export function uAt(x: number): number {
+  return Math.max(0, Math.min(100, ((x - PLOT.left - PLOT_PAD) / MAP_W) * 100));
+}
+export function iAt(y: number): number {
+  return Math.max(0, Math.min(100, ((PLOT.bottom - PLOT_PAD - y) / MAP_H) * 100));
 }
 export function radiusOf(estimate: number): number {
   return 8 + estimate * 2.1;
@@ -66,10 +78,10 @@ export function resolveCollisions(
         fixed: p.pinned,
         originX: x,
         originY: y,
-        minX: right ? midX : PLOT.left,
-        maxX: right ? PLOT.right : midX,
-        minY: top ? PLOT.top : midY,
-        maxY: top ? midY : PLOT.bottom,
+        minX: right ? midX : xOf(0),
+        maxX: right ? xOf(100) : midX,
+        minY: top ? yOf(100) : midY,
+        maxY: top ? midY : yOf(0),
       };
     });
 
