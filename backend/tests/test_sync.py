@@ -150,6 +150,29 @@ async def test_sync_error_path(app_creds, clean_db):  # noqa: F811
 
 
 @respx.mock
+async def test_recovery_failure_does_not_mask_original_error(app_creds, clean_db, monkeypatch):  # noqa: F811
+    """If the DB dies mid-recovery, the original error still propagates and the
+    job stays 'running' — the stuck-job sweep is the documented safety net."""
+    _token_route()
+    respx.get("https://api.github.com/repos/patelmj/IssueLens/issues").mock(
+        return_value=httpx.Response(500, json={"message": "boom"})
+    )
+    async with get_sessionmaker()() as session:
+        await seed(session)
+
+        async def broken_rollback():
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr(session, "rollback", broken_rollback)
+        async with make_http_client() as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await sync_repository_issues(session, client, 500)
+    async with get_sessionmaker()() as check:
+        job = (await check.execute(select(SyncJob))).scalar_one()
+        assert job.status == "running"  # recovery could not write; sweep's problem now
+
+
+@respx.mock
 async def test_incremental_sync_sends_since(app_creds, clean_db):  # noqa: F811
     _token_route()
     route = respx.get("https://api.github.com/repos/patelmj/IssueLens/issues").mock(
