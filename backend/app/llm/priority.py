@@ -28,7 +28,13 @@ PRIORITY_URGENCY = {"P0": 30, "P1": 18, "P2": 8}
 PRIORITY_IMPORTANCE = {"P0": 35, "P1": 20, "P2": 8}
 # priority label -> (age threshold in days, urgency bonus once exceeded)
 AGE_URGENCY = {"P0": (7, 15), "P1": (30, 10), "P2": (90, 5), None: (180, 5)}
-MILESTONE_URGENCY = 12
+MILESTONE_URGENCY = 12  # milestone assigned but no due date
+MILESTONE_OVERDUE_URGENCY = 25
+MILESTONE_DUE_SOON_DAYS = 7
+MILESTONE_DUE_SOON_URGENCY = 20
+MILESTONE_DUE_NEAR_DAYS = 30
+MILESTONE_DUE_NEAR_URGENCY = 12
+MILESTONE_DUE_FAR_URGENCY = 6
 NO_MILESTONE_PENALTY = 8
 ACTIVE_DISCUSSION_URGENCY = 10
 ACTIVE_DISCUSSION_MAX_DAYS = 7
@@ -90,6 +96,7 @@ def compute_signal_scores(
     *,
     labels: list[dict],
     milestone_title: str | None,
+    milestone_due_on: datetime | None,
     comments_count: int,
     gh_created_at: datetime,
     gh_updated_at: datetime,
@@ -118,10 +125,32 @@ def compute_signal_scores(
         )
 
     if milestone_title:
-        urgency += MILESTONE_URGENCY
-        factors.append(
-            _factor("urgency", "+", f"Assigned to milestone {milestone_title}", MILESTONE_URGENCY)
-        )
+        if milestone_due_on is not None:
+            days_until_due = (milestone_due_on - now).days
+            if days_until_due < 0:
+                weight = MILESTONE_OVERDUE_URGENCY
+                text = f"Milestone {milestone_title} overdue by {-days_until_due} days"
+            elif days_until_due <= MILESTONE_DUE_SOON_DAYS:
+                weight = MILESTONE_DUE_SOON_URGENCY
+                text = f"Milestone {milestone_title} due in {days_until_due} days"
+            elif days_until_due <= MILESTONE_DUE_NEAR_DAYS:
+                weight = MILESTONE_DUE_NEAR_URGENCY
+                text = f"Milestone {milestone_title} due in {days_until_due} days"
+            else:
+                weight = MILESTONE_DUE_FAR_URGENCY
+                text = f"Milestone {milestone_title} due in {days_until_due} days"
+            urgency += weight
+            factors.append(_factor("urgency", "+", text, weight))
+        else:
+            urgency += MILESTONE_URGENCY
+            factors.append(
+                _factor(
+                    "urgency",
+                    "+",
+                    f"Assigned to milestone {milestone_title}",
+                    MILESTONE_URGENCY,
+                )
+            )
     else:
         urgency -= NO_MILESTONE_PENALTY
         factors.append(
@@ -276,6 +305,7 @@ async def score_repository_priorities(
             signals = compute_signal_scores(
                 labels=issue.labels or [],
                 milestone_title=issue.milestone_title,
+                milestone_due_on=issue.milestone_due_on,
                 comments_count=issue.comments_count,
                 gh_created_at=issue.gh_created_at,
                 gh_updated_at=issue.gh_updated_at,

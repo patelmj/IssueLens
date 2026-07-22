@@ -20,7 +20,14 @@ def _token_route():
     )
 
 
-def gh_issue(id_: int, number: int, state: str = "open", pr: bool = False, updated: str = "2026-07-10T10:00:00Z") -> dict:
+def gh_issue(
+    id_: int,
+    number: int,
+    state: str = "open",
+    pr: bool = False,
+    updated: str = "2026-07-10T10:00:00Z",
+    milestone: dict | None = None,
+) -> dict:
     item = {
         "id": id_,
         "number": number,
@@ -30,7 +37,7 @@ def gh_issue(id_: int, number: int, state: str = "open", pr: bool = False, updat
         "user": {"login": "patelmj"},
         "labels": [{"name": "bug", "color": "d73a4a"}],
         "assignees": [{"login": "patelmj"}],
-        "milestone": None,
+        "milestone": milestone,
         "comments": 2,
         "created_at": "2026-07-01T00:00:00Z",
         "updated_at": updated,
@@ -188,3 +195,24 @@ async def test_incremental_sync_sends_since(app_creds, clean_db):  # noqa: F811
     second_params = dict(route.calls[-1].request.url.params)
     # last_synced_at after run 1 = gh_issue updated (2026-07-10T10:00Z) minus 5-min overlap
     assert second_params["since"] == "2026-07-10T09:55:00Z"
+
+
+@respx.mock
+async def test_sync_maps_milestone_due_date(app_creds, clean_db):  # noqa: F811
+    _token_route()
+    payload = [
+        gh_issue(1, 1, milestone={"title": "v2.0", "due_on": "2026-08-01T07:00:00Z"}),
+        gh_issue(2, 2),
+    ]
+    respx.get("https://api.github.com/repos/patelmj/IssueLens/issues").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    async with get_sessionmaker()() as session:
+        await seed(session)
+        async with make_http_client() as client:
+            await sync_repository_issues(session, client, 500)
+        issues = {i.id: i for i in (await session.execute(select(Issue))).scalars()}
+        assert issues[1].milestone_title == "v2.0"
+        assert issues[1].milestone_due_on == datetime(2026, 8, 1, 7, 0, tzinfo=timezone.utc)
+        assert issues[2].milestone_title is None
+        assert issues[2].milestone_due_on is None

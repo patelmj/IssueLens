@@ -81,6 +81,9 @@ class Issue(Base):
     labels: Mapped[list] = mapped_column(JSONB, default=list)
     assignees: Mapped[list] = mapped_column(JSONB, default=list)
     milestone_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    milestone_due_on: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     comments_count: Mapped[int] = mapped_column(Integer, default=0)
     is_pull_request: Mapped[bool] = mapped_column(Boolean, default=False)
     gh_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

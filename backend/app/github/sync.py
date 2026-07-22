@@ -86,6 +86,7 @@ def _issue_values(item: dict[str, Any], repo_id: int) -> dict[str, Any]:
         ],
         "assignees": [a["login"] for a in item.get("assignees", [])],
         "milestone_title": (item.get("milestone") or {}).get("title"),
+        "milestone_due_on": _parse_ts((item.get("milestone") or {}).get("due_on")),
         "comments_count": item.get("comments", 0),
         "is_pull_request": "pull_request" in item,
         "gh_created_at": _parse_ts(item["created_at"]),
