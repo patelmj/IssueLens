@@ -110,6 +110,7 @@ export function Sidenav() {
                     <ul className="mt-0.5 flex flex-col gap-0.5">
                       {matrixViews.map((view) => {
                         const viewHref = savedViewHref(view);
+                        if (viewHref == null) return null;
                         return (
                           <li key={view.id}>
                             <Link

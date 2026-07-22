@@ -148,13 +148,15 @@ export function ViewsClient() {
                   {filterSummary(filtersFromJson(view.filters))}
                 </div>
               </div>
-              <Link
-                href={savedViewHref(view)}
-                data-testid={`view-open-${view.id}`}
-                className="rounded-lg border border-(--color-border) px-2.5 py-1 text-(--color-primary) transition-all duration-150 hover:bg-(--accent-tint)"
-              >
-                Open
-              </Link>
+              {savedViewHref(view) != null ? (
+                <Link
+                  href={savedViewHref(view)!}
+                  data-testid={`view-open-${view.id}`}
+                  className="rounded-lg border border-(--color-border) px-2.5 py-1 text-(--color-primary) transition-all duration-150 hover:bg-(--accent-tint)"
+                >
+                  Open
+                </Link>
+              ) : null}
               <button
                 type="button"
                 data-testid={`view-rename-${view.id}`}
