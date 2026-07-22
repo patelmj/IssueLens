@@ -38,6 +38,7 @@ async function stubMatrix(page: Page, posts: unknown[], postStatus = 201) {
   await page.route(/\/api\/backend\/repositories\/500\/priority$/, (route: Route) =>
     route.fulfill({ json: payload }),
   );
+  const savedViews: unknown[] = [];
   await page.route(/\/api\/backend\/views$/, (route: Route) => {
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
@@ -48,12 +49,11 @@ async function stubMatrix(page: Page, posts: unknown[], postStatus = 201) {
         });
       }
       posts.push(body);
-      return route.fulfill({
-        status: 201,
-        json: { id: 1, created_at: "2026-07-21T00:00:00Z", ...body },
-      });
+      const view = { id: savedViews.length + 1, created_at: "2026-07-21T00:00:00Z", ...body };
+      savedViews.push(view);
+      return route.fulfill({ status: 201, json: view });
     }
-    return route.fulfill({ json: [] });
+    return route.fulfill({ json: [...savedViews].reverse() });
   });
 }
 
@@ -87,4 +87,29 @@ test("duplicate name shows the API error inline", async ({ page }) => {
   await page.getByTestId("save-view-submit").click();
   await expect(page.getByTestId("save-view-error")).toContainText("already exists");
   await expect(page.getByTestId("save-view-popover")).toBeVisible();
+});
+
+test("saved view appears in the sidebar after saving", async ({ page }) => {
+  const posts: unknown[] = [];
+  await stubMatrix(page, posts);
+  await page.goto("/plan/matrix?repo_id=500&types=bug");
+  await page.getByTestId("save-view").click();
+  await page.getByTestId("save-view-name").fill("Ready bugs");
+  await page.getByTestId("save-view-submit").click();
+  await expect(page.getByTestId("saved-view-link-1")).toHaveText("Ready bugs");
+});
+
+test("popover dismisses on Escape and outside click without saving", async ({ page }) => {
+  const posts: unknown[] = [];
+  await stubMatrix(page, posts);
+  await page.goto("/plan/matrix?repo_id=500&types=bug");
+  await page.getByTestId("save-view").click();
+  await expect(page.getByTestId("save-view-popover")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("save-view-popover")).not.toBeVisible();
+  await page.getByTestId("save-view").click();
+  await expect(page.getByTestId("save-view-popover")).toBeVisible();
+  await page.getByRole("heading", { level: 1 }).click();
+  await expect(page.getByTestId("save-view-popover")).not.toBeVisible();
+  expect(posts.length).toBe(0);
 });

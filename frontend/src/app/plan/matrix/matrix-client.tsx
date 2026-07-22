@@ -211,7 +211,7 @@ export function MatrixClient() {
             Go to Repositories →
           </Link>
         </div>
-      ) : filtersActive && plotted.length === 0 ? (
+      ) : filtersActive && plotted.length === 0 && allPlottedCount > 0 ? (
         <div
           className={`${card} flex flex-col items-center gap-1.5 px-6 py-16 text-center`}
           data-testid="filter-empty"
