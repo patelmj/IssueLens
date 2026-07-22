@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, type PointerEvent } from "react";
-import { PLOT, radiusOf, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { PLOT, radiusOf, resolveCollisions, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
 import {
   SERIES_VAR,
   seriesOf,
@@ -43,6 +43,7 @@ export function MatrixChart({
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const nudges = useMemo(() => resolveCollisions(plotted), [plotted]);
 
   const clientToChart = (e: PointerEvent): { u: number; i: number } => {
     const rect = svgRef.current!.getBoundingClientRect();
@@ -144,8 +145,9 @@ export function MatrixChart({
           const dragging = drag?.issueId === item.issue_id && drag.moved;
           const u = dragging ? drag.u : item.u;
           const i = dragging ? drag.i : item.i;
-          const cx = xOf(u);
-          const cy = yOf(i);
+          const nudge = dragging ? undefined : nudges.get(item.issue_id);
+          const cx = xOf(u) + (nudge?.dx ?? 0);
+          const cy = yOf(i) + (nudge?.dy ?? 0);
           const r = radiusOf(item.estimate);
           const color = SERIES_VAR[seriesOf(item)];
           const isSelected = selectedId === item.issue_id;
