@@ -24,14 +24,14 @@ class SavedViewOut(BaseModel):
 
 
 class SavedViewIn(BaseModel):
-    name: str
+    name: str = Field(max_length=120)
     view_kind: str
     repository_id: int | None = None
     filters: dict = Field(default_factory=dict)
 
 
 class RenameIn(BaseModel):
-    name: str
+    name: str = Field(max_length=120)
 
 
 def _clean_name(name: str) -> str:
@@ -39,6 +39,21 @@ def _clean_name(name: str) -> str:
     if not cleaned:
         raise HTTPException(status_code=422, detail="View name must not be empty")
     return cleaned
+
+
+def _integrity_conflict(exc: IntegrityError, view_kind: str, name: str) -> HTTPException:
+    """Map an IntegrityError to the right HTTP error by constraint name.
+
+    The unique (view_kind, name) constraint means a duplicate name; the FK
+    constraint fires only when the repository vanished between the
+    existence check and the commit.
+    """
+    if "uq_saved_views_kind_name" in str(exc.orig):
+        return HTTPException(
+            status_code=409,
+            detail=f'A {view_kind} view named "{name}" already exists',
+        )
+    return HTTPException(status_code=404, detail="Unknown repository")
 
 
 def _to_out(view: SavedView) -> SavedViewOut:
@@ -98,12 +113,9 @@ async def create_view(
     session.add(view)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f'A {body.view_kind} view named "{name}" already exists',
-        ) from None
+        raise _integrity_conflict(exc, body.view_kind, name) from None
     await session.refresh(view)
     return _to_out(view)
 
