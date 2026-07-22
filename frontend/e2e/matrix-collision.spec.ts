@@ -76,6 +76,7 @@ test("dragged bubble in a stacked pair renders at the raw pointer, exempt from n
   await stubStackedMatrix(page, calls);
   await page.goto("/plan/matrix");
   const bubble = page.getByTestId("bubble-42");
+  await expect(bubble).toBeVisible();
   const box = (await bubble.boundingBox())!;
   const startX = box.x + box.width / 2;
   const startY = box.y + box.height / 2;

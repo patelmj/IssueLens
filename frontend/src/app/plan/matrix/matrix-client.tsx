@@ -243,6 +243,7 @@ export function MatrixClient() {
         <>
           <div className="relative">
             <MatrixChart
+              key={repoId ?? "none"}
               plotted={plotted}
               selectedId={selectedId}
               onSelect={setSelectedId}

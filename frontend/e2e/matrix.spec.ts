@@ -145,6 +145,7 @@ test("release to AI restores computed placement", async ({ page }) => {
   await stubMatrix(page, calls);
   await page.goto("/plan/matrix");
   const bubble = page.getByTestId("bubble-42");
+  await expect(bubble).toBeVisible();
   const box = (await bubble.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
@@ -172,4 +173,14 @@ test("queue row click selects; bubble hover shows explainability with AI tag", a
   await expect(page.getByTestId("hover-factors")).toContainText("Priority P0 set");
   await expect(page.getByTestId("hover-factors")).toContainText("Customer reports login broken");
   await expect(page.getByTestId("hover-card")).toContainText("AI");
+});
+
+test("reduced motion renders bubbles immediately at full size", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubMatrix(page);
+  await page.goto("/plan/matrix");
+  const box = (await page.getByTestId("bubble-42").boundingBox())!;
+  // radiusOf(3) = 14.3 → diameter ≈ 28.6 in viewBox units; even after viewport
+  // scaling the rendered bubble must be far larger than a mid-animation sliver
+  expect(box.width).toBeGreaterThan(10);
 });

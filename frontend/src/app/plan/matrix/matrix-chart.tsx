@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { PLOT, radiusOf, resolveCollisions, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
 import {
   SERIES_VAR,
@@ -45,6 +45,10 @@ export function MatrixChart({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const nudges = useMemo(() => resolveCollisions(plotted), [plotted]);
+  const popRank = useMemo(() => {
+    const order = [...plotted].sort((a, b) => b.u + b.i - (a.u + a.i));
+    return new Map(order.map((item, index) => [item.issue_id, index]));
+  }, [plotted]);
 
   const clientToChart = (e: PointerEvent): { u: number; i: number } => {
     const rect = svgRef.current!.getBoundingClientRect();
@@ -120,22 +124,24 @@ export function MatrixChart({
             <feGaussianBlur stdDeviation="3.2" />
           </filter>
         </defs>
-        {QUADRANTS.map((q) => (
-          <g key={q.label}>
-            <rect x={q.x} y={q.y} width={PLOT_W / 2} height={PLOT_H / 2} fill={`url(#quad-grad-${q.key})`} />
-            <text
-              x={q.lx}
-              y={q.ly}
-              textAnchor={q.anchor ?? "start"}
-              fill={`var(--quad-${q.key}-label)`}
-              fontSize="11"
-              fontWeight="600"
-              letterSpacing="0.08em"
-            >
-              {q.label}
-            </text>
-          </g>
-        ))}
+        <g className="matrix-washes">
+          {QUADRANTS.map((q) => (
+            <g key={q.label}>
+              <rect x={q.x} y={q.y} width={PLOT_W / 2} height={PLOT_H / 2} fill={`url(#quad-grad-${q.key})`} />
+              <text
+                x={q.lx}
+                y={q.ly}
+                textAnchor={q.anchor ?? "start"}
+                fill={`var(--quad-${q.key}-label)`}
+                fontSize="11"
+                fontWeight="600"
+                letterSpacing="0.08em"
+              >
+                {q.label}
+              </text>
+            </g>
+          ))}
+        </g>
 
         {/* grid + axes */}
         <line x1={PLOT.left} y1={PLOT.top + PLOT_H / 2} x2={PLOT.right} y2={PLOT.top + PLOT_H / 2} stroke="var(--chart-grid)" strokeDasharray="3 3" />
@@ -177,7 +183,8 @@ export function MatrixChart({
             <g
               key={item.issue_id}
               data-testid={`bubble-${item.number}`}
-              className="cursor-grab"
+              className="matrix-bubble cursor-grab"
+              style={{ "--pop-delay": `${(popRank.get(item.issue_id) ?? 0) * 70}ms` } as CSSProperties}
               role="button"
               tabIndex={0}
               aria-label={`Issue #${item.number}: ${item.title}`}

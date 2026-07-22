@@ -89,3 +89,30 @@ body {
     background: transparent;
   }
 }
+
+.matrix-washes {
+  animation: matrix-fade-in 0.5s ease both;
+}
+.matrix-bubble {
+  animation: matrix-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(200ms + var(--pop-delay, 0ms));
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes matrix-fade-in {
+  0% {
+    opacity: 0;
+  }
+}
+@keyframes matrix-pop {
+  0% {
+    opacity: 0;
+    scale: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .matrix-washes,
+  .matrix-bubble {
+    animation: none;
+  }
+}
