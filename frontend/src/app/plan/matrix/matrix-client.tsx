@@ -37,6 +37,64 @@ const card =
 
 type Repo = { id: number; full_name: string };
 
+/**
+ * The confirm step is local state, not lifted to MatrixClient: the parent
+ * only renders this component while `count > 0`, so releasing the last pin
+ * (via the queue-row ✕, the pin toast, or the confirm button itself)
+ * unmounts it and destroys `confirming` along with it — a later re-pin
+ * mounts a fresh instance starting in count mode. The `key={repoId}` at the
+ * call site forces the same reset on a repo switch, where `keepPreviousData`
+ * can otherwise keep `count > 0` across the boundary.
+ */
+function PinnedChip({
+  count,
+  onReleaseAll,
+}: {
+  count: number;
+  onReleaseAll: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <span
+      data-testid="pinned-chip"
+      className="flex items-center gap-1.5 rounded-full border border-(--color-border) px-2 py-0.5 text-(--color-text-muted)"
+    >
+      <PinGlyph className="h-3 w-3 shrink-0" />
+      {confirming ? (
+        <>
+          <span>Release all {count}?</span>
+          <button
+            type="button"
+            data-testid="release-all-confirm"
+            className="text-(--color-primary) transition-all duration-150 hover:underline"
+            onClick={onReleaseAll}
+          >
+            Confirm
+          </button>
+          <button
+            type="button"
+            aria-label="Cancel release all"
+            className="transition-all duration-150 hover:text-(--color-text)"
+            onClick={() => setConfirming(false)}
+          >
+            ✕
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          data-testid="release-all"
+          className="transition-all duration-150 hover:text-(--color-text)"
+          onClick={() => setConfirming(true)}
+        >
+          {count} pinned
+        </button>
+      )}
+    </span>
+  );
+}
+
 export function MatrixClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -73,7 +131,6 @@ export function MatrixClient() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [hover, setHover] = useState<{ item: PlottedItem; cx: number; cy: number } | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const [confirmingReleaseAll, setConfirmingReleaseAll] = useState(false);
 
   const patchItem = useCallback(
     (issueId: number, patch: Partial<MatrixItem>) => {
@@ -155,10 +212,7 @@ export function MatrixClient() {
       if (context?.previous) queryClient.setQueryData(matrixKey, context.previous);
       setMutationError(err.message);
     },
-    onSettled: () => {
-      setConfirmingReleaseAll(false);
-      return queryClient.invalidateQueries({ queryKey: matrixKey });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: matrixKey }),
   });
 
   const items = data?.items ?? [];
@@ -205,44 +259,13 @@ export function MatrixClient() {
           </span>
         ) : null}
         {pinnedItems.length > 0 ? (
-          <span
-            data-testid="pinned-chip"
-            className="flex items-center gap-1.5 rounded-full border border-(--color-border) px-2 py-0.5 text-(--color-text-muted)"
-          >
-            <PinGlyph className="h-3 w-3 shrink-0" />
-            {confirmingReleaseAll ? (
-              <>
-                <span>Release all {pinnedItems.length}?</span>
-                <button
-                  type="button"
-                  data-testid="release-all-confirm"
-                  className="text-(--color-primary) transition-all duration-150 hover:underline"
-                  onClick={() =>
-                    releaseAllMutation.mutate(pinnedItems.map((item) => item.issue_id))
-                  }
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  aria-label="Cancel release all"
-                  className="transition-all duration-150 hover:text-(--color-text)"
-                  onClick={() => setConfirmingReleaseAll(false)}
-                >
-                  ✕
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                data-testid="release-all"
-                className="transition-all duration-150 hover:text-(--color-text)"
-                onClick={() => setConfirmingReleaseAll(true)}
-              >
-                {pinnedItems.length} pinned
-              </button>
-            )}
-          </span>
+          <PinnedChip
+            key={repoId}
+            count={pinnedItems.length}
+            onReleaseAll={() =>
+              releaseAllMutation.mutate(pinnedItems.map((item) => item.issue_id))
+            }
+          />
         ) : null}
         <SaveViewButton
           viewKind="matrix"

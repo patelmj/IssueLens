@@ -109,7 +109,11 @@ export function ExecutionQueue({
                     <span className="text-(--color-text-muted) tabular-nums">
                       {Math.round(item.u + item.i)}
                     </span>
-                    {item.pinned ? <PinGlyph className="h-3 w-3 shrink-0" /> : null}
+                    {item.pinned ? (
+                      <span role="img" aria-label="pinned">
+                        <PinGlyph className="h-3 w-3 shrink-0" />
+                      </span>
+                    ) : null}
                   </button>
                   {item.pinned ? (
                     <button

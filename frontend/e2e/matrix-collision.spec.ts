@@ -57,6 +57,7 @@ test("stacked bubbles are nudged apart to non-overlapping positions", async ({ p
   await page.goto("/plan/matrix");
   const centers: { x: number; y: number }[] = [];
   for (const num of [42, 43, 44]) {
+    await expect(page.getByTestId(`bubble-${num}`)).toBeVisible();
     const box = (await page.getByTestId(`bubble-${num}`).boundingBox())!;
     centers.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
   }
