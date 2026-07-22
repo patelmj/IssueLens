@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Header } from "./header";
 import { RightRailSlot } from "./right-rail";
 import { Sidenav } from "./sidenav";
@@ -7,7 +8,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <Header />
       <div className="grid grow grid-cols-[216px_minmax(0,1fr)_330px] gap-5 p-5">
-        <Sidenav />
+        <Suspense fallback={<nav aria-label="Primary" />}>
+          <Sidenav />
+        </Suspense>
         <main className="min-w-0">{children}</main>
         <aside>
           <RightRailSlot

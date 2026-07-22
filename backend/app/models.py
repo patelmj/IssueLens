@@ -190,6 +190,27 @@ class IssueWorkflow(Base):
     )
 
 
+class SavedView(Base):
+    __tablename__ = "saved_views"
+    __table_args__ = (
+        UniqueConstraint("view_kind", "name", name="uq_saved_views_kind_name"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(Text)
+    view_kind: Mapped[str] = mapped_column(Text)
+    repository_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=True
+    )
+    filters: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
 
