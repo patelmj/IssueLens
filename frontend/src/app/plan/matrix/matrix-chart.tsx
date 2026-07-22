@@ -21,11 +21,11 @@ type DragState = {
   i: number;
 };
 
-const QUADRANT_RECTS = [
-  { x: PLOT.left, y: PLOT.top, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-schedule)", label: "SCHEDULE", lx: PLOT.left + 12, ly: PLOT.top + 20 },
-  { x: PLOT.left + PLOT_W / 2, y: PLOT.top, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-dofirst)", label: "DO FIRST", lx: PLOT.right - 12, ly: PLOT.top + 20, anchor: "end" as const },
-  { x: PLOT.left + PLOT_W / 2, y: PLOT.top + PLOT_H / 2, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-delegate)", label: "DELEGATE / QUICK WINS", lx: PLOT.right - 12, ly: PLOT.bottom - 10, anchor: "end" as const },
-  { x: PLOT.left, y: PLOT.top + PLOT_H / 2, w: PLOT_W / 2, h: PLOT_H / 2, fill: "var(--quad-reconsider)", label: "RECONSIDER", lx: PLOT.left + 12, ly: PLOT.bottom - 10 },
+const QUADRANTS = [
+  { key: "schedule", x: PLOT.left, y: PLOT.top, cornerX: 0, cornerY: 0, label: "SCHEDULE", lx: PLOT.left + 12, ly: PLOT.top + 20 },
+  { key: "dofirst", x: PLOT.left + PLOT_W / 2, y: PLOT.top, cornerX: 1, cornerY: 0, label: "DO FIRST", lx: PLOT.right - 12, ly: PLOT.top + 20, anchor: "end" as const },
+  { key: "delegate", x: PLOT.left + PLOT_W / 2, y: PLOT.top + PLOT_H / 2, cornerX: 1, cornerY: 1, label: "DELEGATE / QUICK WINS", lx: PLOT.right - 12, ly: PLOT.bottom - 10, anchor: "end" as const },
+  { key: "reconsider", x: PLOT.left, y: PLOT.top + PLOT_H / 2, cornerX: 0, cornerY: 1, label: "RECONSIDER", lx: PLOT.left + 12, ly: PLOT.bottom - 10 },
 ];
 
 export function MatrixChart({
@@ -102,14 +102,28 @@ export function MatrixChart({
         aria-label="Priority matrix: urgency by importance. Bubbles are focusable; press Enter to select."
         data-testid="matrix-chart"
       >
-        {QUADRANT_RECTS.map((q) => (
+        <defs>
+          {QUADRANTS.map((q) => (
+            <radialGradient
+              key={q.key}
+              id={`quad-grad-${q.key}`}
+              cx={q.cornerX}
+              cy={q.cornerY}
+              r={1.15}
+            >
+              <stop offset="0" stopColor={`var(--quad-${q.key}-strong)`} />
+              <stop offset="1" stopColor={`var(--quad-${q.key}-strong)`} stopOpacity={0} />
+            </radialGradient>
+          ))}
+        </defs>
+        {QUADRANTS.map((q) => (
           <g key={q.label}>
-            <rect x={q.x} y={q.y} width={q.w} height={q.h} fill={q.fill} />
+            <rect x={q.x} y={q.y} width={PLOT_W / 2} height={PLOT_H / 2} fill={`url(#quad-grad-${q.key})`} />
             <text
               x={q.lx}
               y={q.ly}
               textAnchor={q.anchor ?? "start"}
-              fill="var(--color-text-muted)"
+              fill={`var(--quad-${q.key}-label)`}
               fontSize="11"
               fontWeight="600"
               letterSpacing="0.08em"
@@ -120,8 +134,8 @@ export function MatrixChart({
         ))}
 
         {/* grid + axes */}
-        <line x1={PLOT.left} y1={PLOT.top + PLOT_H / 2} x2={PLOT.right} y2={PLOT.top + PLOT_H / 2} stroke="var(--chart-grid)" />
-        <line x1={PLOT.left + PLOT_W / 2} y1={PLOT.top} x2={PLOT.left + PLOT_W / 2} y2={PLOT.bottom} stroke="var(--chart-grid)" />
+        <line x1={PLOT.left} y1={PLOT.top + PLOT_H / 2} x2={PLOT.right} y2={PLOT.top + PLOT_H / 2} stroke="var(--chart-grid)" strokeDasharray="3 3" />
+        <line x1={PLOT.left + PLOT_W / 2} y1={PLOT.top} x2={PLOT.left + PLOT_W / 2} y2={PLOT.bottom} stroke="var(--chart-grid)" strokeDasharray="3 3" />
         <line x1={PLOT.left} y1={PLOT.bottom} x2={PLOT.right} y2={PLOT.bottom} stroke="var(--chart-axis)" />
         <line x1={PLOT.left} y1={PLOT.top} x2={PLOT.left} y2={PLOT.bottom} stroke="var(--chart-axis)" />
         {[0, 50, 100].map((tick) => (
@@ -137,8 +151,12 @@ export function MatrixChart({
         <text x={PLOT.right} y={VIEW_H - 6} textAnchor="end" fill="var(--color-text-muted)" fontSize="11">
           Urgency →
         </text>
-        <text x={14} y={PLOT.top + 10} fill="var(--color-text-muted)" fontSize="11">
-          Importance ↑
+        <text
+          transform={`translate(14 ${PLOT.bottom}) rotate(-90)`}
+          fill="var(--color-text-muted)"
+          fontSize="11"
+        >
+          Importance →
         </text>
 
         {plotted.map((item) => {
