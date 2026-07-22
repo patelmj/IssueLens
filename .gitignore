@@ -13,8 +13,3 @@ frontend/playwright-report/
 
 # Env
 .env
-
-.superpowers/
-.claude/
-.planning/
-.playwright-mcp/
