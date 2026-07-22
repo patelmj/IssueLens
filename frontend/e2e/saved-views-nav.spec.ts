@@ -38,6 +38,7 @@ const views = [
     view_kind: "matrix",
     repository_id: 500,
     filters: { types: ["bug"], readiness: "ready" },
+    position: 0,
     created_at: "2026-07-21T00:00:00Z",
   },
   {
@@ -46,7 +47,17 @@ const views = [
     view_kind: "matrix",
     repository_id: 500,
     filters: { types: ["docs"], readiness: null },
+    position: 1,
     created_at: "2026-07-20T00:00:00Z",
+  },
+  {
+    id: 3,
+    name: "Readiness gaps",
+    view_kind: "table",
+    repository_id: 500,
+    filters: { type: "bug", max_readiness: "50", sort: "readiness", order: "asc" },
+    position: 2,
+    created_at: "2026-07-22T00:00:00Z",
   },
 ];
 
@@ -62,13 +73,17 @@ async function stubAll(page: Page) {
   );
 }
 
-test("sidebar lists saved views with a live count pill", async ({ page }) => {
+test("sidebar lists saved views grouped by repo with a live count pill", async ({
+  page,
+}) => {
   await stubAll(page);
   await page.goto("/plan/matrix");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await expect(nav.getByTestId("saved-view-link-1")).toHaveText("Ready bugs");
-  await expect(nav.getByTestId("saved-view-link-2")).toHaveText("Docs pile");
-  await expect(nav.getByTestId("views-count")).toHaveText("2");
+  await expect(nav.getByTestId("saved-view-link-1")).toContainText("Ready bugs");
+  await expect(nav.getByTestId("saved-view-link-2")).toContainText("Docs pile");
+  await expect(nav.getByTestId("saved-view-link-3")).toContainText("Readiness gaps");
+  await expect(nav).toContainText("mehova");
+  await expect(nav.getByTestId("views-count")).toHaveText("3");
 });
 
 test("clicking a saved view navigates and applies its filters", async ({ page }) => {
@@ -100,6 +115,21 @@ test("active highlight matches hand-ordered URLs canonically", async ({ page }) 
   // same params as view 1's canonical href, deliberately reordered
   await page.goto("/plan/matrix?types=bug&readiness=ready&repo_id=500");
   await expect(page.getByTestId("saved-view-link-1")).toHaveClass(
+    /text-\(--color-primary\)/,
+  );
+});
+
+test("table view link is active on a hand-ordered table URL", async ({ page }) => {
+  await stubAll(page);
+  await page.route(/\/api\/backend\/issues\/facets/, (route: Route) =>
+    route.fulfill({ json: { labels: [], assignees: [], components: [] } }),
+  );
+  await page.route(/\/api\/backend\/issues\?/, (route: Route) =>
+    route.fulfill({ json: { items: [], total: 0, limit: 50, offset: 0 } }),
+  );
+  // same params as view 3's canonical href, deliberately reordered
+  await page.goto("/plan?sort=readiness&order=asc&type=bug&repo_id=500&max_readiness=50");
+  await expect(page.getByTestId("saved-view-link-3")).toHaveClass(
     /text-\(--color-primary\)/,
   );
 });
