@@ -35,6 +35,11 @@ class RenameIn(BaseModel):
     name: str = Field(max_length=120)
 
 
+class OrderIn(BaseModel):
+    repository_id: int
+    ordered_ids: list[int]
+
+
 def _clean_name(name: str) -> str:
     cleaned = name.strip()
     if not cleaned:
@@ -83,6 +88,42 @@ async def list_views(session: AsyncSession = Depends(get_session)) -> list[Saved
         .all()
     )
     return [_to_out(view) for view in views]
+
+
+@router.put("/views/order", response_model=list[SavedViewOut])
+async def reorder_views(
+    body: OrderIn, session: AsyncSession = Depends(get_session)
+) -> list[SavedViewOut]:
+    repo = (
+        await session.execute(
+            select(Repository).where(Repository.id == body.repository_id)
+        )
+    ).scalar_one_or_none()
+    if repo is None:
+        raise HTTPException(status_code=404, detail="Unknown repository")
+    views = (
+        (
+            await session.execute(
+                select(SavedView).where(
+                    SavedView.repository_id == body.repository_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(body.ordered_ids) != len(set(body.ordered_ids)) or set(
+        body.ordered_ids
+    ) != {view.id for view in views}:
+        raise HTTPException(
+            status_code=422,
+            detail="ordered_ids must be exactly this repository's view ids",
+        )
+    new_position = {view_id: index for index, view_id in enumerate(body.ordered_ids)}
+    for view in views:
+        view.position = new_position[view.id]
+    await session.commit()
+    return [_to_out(view) for view in sorted(views, key=lambda v: v.position)]
 
 
 @router.post("/views", response_model=SavedViewOut, status_code=201)
