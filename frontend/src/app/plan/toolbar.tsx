@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { getJson } from "../../lib/api";
 import { COLUMNS, type ColumnKey, type TableParams } from "./plan-client";
@@ -35,10 +36,12 @@ export function Toolbar({
   params,
   visible,
   onToggleColumn,
+  saveSlot,
 }: {
   params: TableParams;
   visible: Set<ColumnKey>;
   onToggleColumn: (key: ColumnKey) => void;
+  saveSlot?: ReactNode;
 }) {
   const { repoId, state, label, assignee, q, type, component, maxReadiness, setParams } =
     params;
@@ -196,6 +199,8 @@ export function Toolbar({
       </select>
 
       <div className="grow" />
+
+      {saveSlot}
 
       <details className="relative">
         <summary
