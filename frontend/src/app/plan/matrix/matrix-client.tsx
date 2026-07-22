@@ -261,6 +261,7 @@ export function MatrixClient() {
               plotted={plotted}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              onRelease={(issueId) => releaseMutation.mutate(issueId)}
             />
           </RightRail>
           {selected?.pinned ? (
