@@ -33,6 +33,22 @@ Give Claude verification loops for quality:
 - When something goes sideways, switch back to plan mode and re-plan. Don't keep pushing.
 - Use plan mode for verification steps too, not just for the build
 
+## UI / Design Option Decisions
+
+- **When the user needs to pick between UI/visual options** (bubble styles, layouts,
+  color treatments, indicator designs, motion variants), use the **visual companion**
+  from `superpowers:brainstorming`: start its browser server
+  (`skills/brainstorming/scripts/start-server.sh` in the superpowers plugin, with
+  `--project-dir` + `--open`; on Windows run via Bash tool with `run_in_background: true`
+  and read `state_dir/server-info` for the URL) and present the options as interactive
+  side-by-side mockup cards the user clicks to choose. Render options with the REAL
+  theme tokens/palette on both dark and light surfaces. This worked fabulously for the
+  matrix visual refresh (2026-07-22) — prefer it over describing visual options in text.
+- Windows gotcha: the server's random port can land in an excluded range
+  (`EACCES` on bind). Fix: seed `.superpowers/brainstorm/.last-port` with a safe port
+  (e.g. 52000) before starting; check `netsh interface ipv4 show excludedportrange
+  protocol=tcp`.
+
 ## Parallel Work
 
 - For tasks that need more compute, use subagents to work in parallel
