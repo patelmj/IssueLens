@@ -43,6 +43,17 @@ export function FilterChips({
     setLocalTypes(filters.types);
   }
 
+  // Same optimistic-mirror pattern for the readiness bucket, so both chips
+  // read local state and every onChange payload is built from locals —
+  // otherwise a click in one panel landing before the other panel's
+  // router.replace resolves would spread stale URL state over it.
+  const [localReadiness, setLocalReadiness] = useState(filters.readiness);
+  const [syncedReadiness, setSyncedReadiness] = useState(filters.readiness);
+  if (filters.readiness !== syncedReadiness) {
+    setSyncedReadiness(filters.readiness);
+    setLocalReadiness(filters.readiness);
+  }
+
   useEffect(() => {
     if (!openPanel) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -65,15 +76,15 @@ export function FilterChips({
     const has = localTypes.includes(t);
     const nextTypes = has ? localTypes.filter((x) => x !== t) : [...localTypes, t];
     setLocalTypes(nextTypes);
-    onChange({ ...filters, types: nextTypes });
+    onChange({ types: nextTypes, readiness: localReadiness });
   };
 
   const typeLabel =
     localTypes.length === 0
       ? "Type: All"
       : `Type: ${localTypes.map((t) => TYPE_LABEL[t]).join(", ")}`;
-  const readinessLabel = filters.readiness
-    ? `Readiness: ${READINESS_BUCKETS[filters.readiness].label}`
+  const readinessLabel = localReadiness
+    ? `Readiness: ${READINESS_BUCKETS[localReadiness].label}`
     : "Readiness: Any";
 
   return (
@@ -112,7 +123,7 @@ export function FilterChips({
           type="button"
           data-testid="readiness-chip"
           aria-expanded={openPanel === "readiness"}
-          className={`${chipBase} ${filters.readiness ? chipActive : chipIdle}`}
+          className={`${chipBase} ${localReadiness ? chipActive : chipIdle}`}
           onClick={() => setOpenPanel(openPanel === "readiness" ? null : "readiness")}
         >
           {readinessLabel}
@@ -123,10 +134,11 @@ export function FilterChips({
               type="button"
               data-testid="readiness-any"
               className={`rounded-md px-2 py-1 text-left transition-all duration-150 hover:bg-(--accent-tint) ${
-                filters.readiness == null ? "text-(--color-primary)" : ""
+                localReadiness == null ? "text-(--color-primary)" : ""
               }`}
               onClick={() => {
-                onChange({ ...filters, readiness: null });
+                setLocalReadiness(null);
+                onChange({ types: localTypes, readiness: null });
                 setOpenPanel(null);
               }}
             >
@@ -138,10 +150,11 @@ export function FilterChips({
                 type="button"
                 data-testid={`readiness-${bucket}`}
                 className={`rounded-md px-2 py-1 text-left transition-all duration-150 hover:bg-(--accent-tint) ${
-                  filters.readiness === bucket ? "text-(--color-primary)" : ""
+                  localReadiness === bucket ? "text-(--color-primary)" : ""
                 }`}
                 onClick={() => {
-                  onChange({ ...filters, readiness: bucket });
+                  setLocalReadiness(bucket);
+                  onChange({ types: localTypes, readiness: bucket });
                   setOpenPanel(null);
                 }}
               >
@@ -159,6 +172,7 @@ export function FilterChips({
           className="text-(--color-text-muted) transition-all duration-150 hover:text-(--color-text)"
           onClick={() => {
             setLocalTypes([]);
+            setLocalReadiness(null);
             onChange(NO_FILTERS);
           }}
         >

@@ -115,3 +115,41 @@ async def test_delete_idempotent(client, clean_db):
     assert (await client.get("/views")).json() == []
     # deleting again is still 204
     assert (await client.delete(f"/views/{created['id']}")).status_code == 204
+
+
+async def test_create_name_too_long(client, clean_db):
+    await seed_repo()
+    resp = await client.post("/views", json={**MATRIX_VIEW, "name": "x" * 121})
+    assert resp.status_code == 422
+
+
+async def test_rename_name_too_long(client, clean_db):
+    await seed_repo()
+    created = (await client.post("/views", json=MATRIX_VIEW)).json()
+    resp = await client.patch(f"/views/{created['id']}", json={"name": "x" * 121})
+    assert resp.status_code == 422
+
+
+async def test_non_integer_view_id_is_422(client, clean_db):
+    assert (await client.patch("/views/abc", json={"name": "X"})).status_code == 422
+    assert (await client.delete("/views/abc")).status_code == 422
+
+
+def test_integrity_conflict_maps_unique_to_409_and_fk_to_404():
+    from sqlalchemy.exc import IntegrityError
+
+    from app.routers.views import _integrity_conflict
+
+    unique = IntegrityError(
+        "stmt", {}, Exception('duplicate key violates "uq_saved_views_kind_name"')
+    )
+    conflict = _integrity_conflict(unique, "matrix", "Dup")
+    assert conflict.status_code == 409
+    assert "already exists" in conflict.detail
+
+    fk = IntegrityError(
+        "stmt", {}, Exception('violates foreign key constraint "saved_views_repository_id_fkey"')
+    )
+    missing = _integrity_conflict(fk, "matrix", "Dup")
+    assert missing.status_code == 404
+    assert missing.detail == "Unknown repository"

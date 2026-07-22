@@ -34,9 +34,9 @@ export function ViewsClient() {
     onSuccess: () => {
       setRenamingId(null);
       setActionError(null);
-      queryClient.invalidateQueries({ queryKey: VIEWS_KEY });
     },
     onError: (err) => setActionError(err.message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: VIEWS_KEY }),
   });
 
   const deleteMutation = useMutation({
@@ -45,9 +45,9 @@ export function ViewsClient() {
     onSuccess: () => {
       setConfirmDeleteId(null);
       setActionError(null);
-      queryClient.invalidateQueries({ queryKey: VIEWS_KEY });
     },
     onError: (err) => setActionError(err.message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: VIEWS_KEY }),
   });
 
   const repoName = (id: number | null) =>
@@ -128,6 +128,7 @@ export function ViewsClient() {
                     </button>
                     <button
                       type="button"
+                      data-testid="view-rename-cancel"
                       className="text-(--color-text-muted) transition-all duration-150 hover:text-(--color-text)"
                       onClick={() => setRenamingId(null)}
                     >
@@ -162,6 +163,7 @@ export function ViewsClient() {
                   setRenamingId(view.id);
                   setRenameValue(view.name);
                   setConfirmDeleteId(null);
+                  setActionError(null);
                 }}
               >
                 Rename
@@ -183,6 +185,7 @@ export function ViewsClient() {
                   } else {
                     setConfirmDeleteId(view.id);
                     setRenamingId(null);
+                    setActionError(null);
                   }
                 }}
               >

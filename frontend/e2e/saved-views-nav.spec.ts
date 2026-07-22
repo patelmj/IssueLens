@@ -94,3 +94,12 @@ test("views fetch failure leaves static sidebar intact", async ({ page }) => {
   await nav.getByRole("link", { name: "Saved Views" }).click();
   await expect(page).toHaveURL("/views");
 });
+
+test("active highlight matches hand-ordered URLs canonically", async ({ page }) => {
+  await stubAll(page);
+  // same params as view 1's canonical href, deliberately reordered
+  await page.goto("/plan/matrix?types=bug&readiness=ready&repo_id=500");
+  await expect(page.getByTestId("saved-view-link-1")).toHaveClass(
+    /text-\(--color-primary\)/,
+  );
+});

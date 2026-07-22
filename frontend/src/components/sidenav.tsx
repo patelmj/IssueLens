@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { filtersToSearch, parseFilters } from "../lib/matrix-filters";
 import { fetchViews, savedViewHref, VIEWS_KEY } from "../lib/views";
 
 export const NAV_ITEMS = [
@@ -42,8 +43,12 @@ const childLink = (active: boolean) =>
 export function Sidenav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const search = searchParams.toString();
-  const currentUrl = search ? `${pathname}?${search}` : pathname;
+  const repoParam = searchParams.get("repo_id");
+  const canonicalSearch = filtersToSearch(
+    repoParam ? Number(repoParam) : null,
+    parseFilters(searchParams),
+  );
+  const currentUrl = canonicalSearch ? `${pathname}?${canonicalSearch}` : pathname;
 
   const { data: views } = useQuery({
     queryKey: VIEWS_KEY,

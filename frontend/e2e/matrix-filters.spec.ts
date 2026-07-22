@@ -148,3 +148,37 @@ test("chips stay legible after theme toggle", async ({ page }) => {
   await expect(page.getByTestId("type-chip")).toBeVisible();
   await expect(page.getByTestId("readiness-chip")).toBeVisible();
 });
+
+test("rapid cross-panel selection composes both filters", async ({ page }) => {
+  await stubMatrix(page);
+  await page.goto("/plan/matrix");
+  await page.getByTestId("type-chip").click();
+  await page.getByTestId("type-panel").getByRole("checkbox", { name: "Bug" }).check();
+  // immediately switch panels and pick a bucket — no waiting for the URL
+  await page.getByTestId("readiness-chip").click();
+  await page.getByTestId("readiness-ready").click();
+  await expect(page).toHaveURL(/types=bug/);
+  await expect(page).toHaveURL(/readiness=ready/);
+  await expect(page.getByTestId("type-chip")).toContainText("Type: Bug");
+  await expect(page.getByTestId("readiness-chip")).toContainText("Ready (≥80)");
+});
+
+test("zero-scored repo with active filters shows the generic empty state", async ({ page }) => {
+  await page.route(/\/api\/backend\/repositories$/, (route) =>
+    route.fulfill({ json: [{ id: 500, full_name: "patelmj/mehova" }] }),
+  );
+  await page.route(/\/api\/backend\/repositories\/500\/priority$/, (route) =>
+    route.fulfill({
+      json: {
+        items: [item({ issue_id: 5, number: 44, title: "Awaiting analysis", urgency: null, importance: null })],
+        total: 1,
+        scored: 0,
+        unscored: 1,
+      },
+    }),
+  );
+  await page.route(/\/api\/backend\/views$/, (route) => route.fulfill({ json: [] }));
+  await page.goto("/plan/matrix?repo_id=500&types=bug");
+  await expect(page.getByText("No scored issues yet", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("filter-empty")).not.toBeVisible();
+});
