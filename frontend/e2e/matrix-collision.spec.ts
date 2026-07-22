@@ -21,7 +21,7 @@ const item = (issue_id: number, number: number, over: Partial<Record<string, unk
   ...over,
 });
 
-async function stubStackedMatrix(page: Page) {
+async function stubStackedMatrix(page: Page, calls?: { pins: unknown[] }) {
   await page.route(/\/api\/backend\/repositories$/, (route: Route) =>
     route.fulfill({ json: [{ id: 500, full_name: "patelmj/mehova" }] }),
   );
@@ -35,6 +35,21 @@ async function stubStackedMatrix(page: Page) {
       },
     }),
   );
+  await page.route(/\/api\/backend\/issues\/\d+\/pin$/, (route: Route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as { urgency: number; importance: number };
+      calls?.pins.push(body);
+      return route.fulfill({
+        json: {
+          issue_id: 1,
+          pinned: true,
+          pinned_urgency: body.urgency,
+          pinned_importance: body.importance,
+        },
+      });
+    }
+    return route.fulfill({ status: 204, body: "" });
+  });
 }
 
 test("stacked bubbles are nudged apart to non-overlapping positions", async ({ page }) => {
@@ -52,4 +67,33 @@ test("stacked bubbles are nudged apart to non-overlapping positions", async ({ p
       expect(dist).toBeGreaterThan(10);
     }
   }
+});
+
+test("dragged bubble in a stacked pair renders at the raw pointer, exempt from nudging", async ({
+  page,
+}) => {
+  const calls = { pins: [] as unknown[] };
+  await stubStackedMatrix(page, calls);
+  await page.goto("/plan/matrix");
+  const bubble = page.getByTestId("bubble-42");
+  const box = (await bubble.boundingBox())!;
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  const targetX = startX - 150;
+  const targetY = startY + 100;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(targetX, targetY, { steps: 8 });
+
+  // Mid-drag, before mouse.up: bubble 42 started stacked with bubble 43 (same
+  // urgency/importance), so if the drag exemption were missing it would still
+  // carry a nudge offset here and render off the raw pointer position.
+  const midBox = (await bubble.boundingBox())!;
+  const midCenter = { x: midBox.x + midBox.width / 2, y: midBox.y + midBox.height / 2 };
+  expect(Math.abs(midCenter.x - targetX)).toBeLessThan(3);
+  expect(Math.abs(midCenter.y - targetY)).toBeLessThan(3);
+
+  await page.mouse.up();
+  await expect.poll(() => calls.pins.length).toBe(1);
 });
