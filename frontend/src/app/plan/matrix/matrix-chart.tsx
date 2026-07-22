@@ -1,28 +1,16 @@
 "use client";
 
 import { useRef, useState, type PointerEvent } from "react";
+import { PLOT, radiusOf, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
 import {
   SERIES_VAR,
   seriesOf,
   type PlottedItem,
 } from "./matrix-types";
 
-export const VIEW_W = 860;
-export const VIEW_H = 560;
-export const PLOT = { left: 52, right: 842, top: 18, bottom: 514 };
 const PLOT_W = PLOT.right - PLOT.left; // 790
 const PLOT_H = PLOT.bottom - PLOT.top; // 496
 const DRAG_THRESHOLD_PX = 3;
-
-export function xOf(u: number): number {
-  return PLOT.left + (u / 100) * PLOT_W;
-}
-export function yOf(i: number): number {
-  return PLOT.bottom - (i / 100) * PLOT_H;
-}
-export function radiusOf(estimate: number): number {
-  return 8 + estimate * 2.1;
-}
 
 type DragState = {
   issueId: number;

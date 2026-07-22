@@ -1,7 +1,7 @@
 "use client";
 
 import type { PlottedItem } from "./matrix-types";
-import { VIEW_H, VIEW_W } from "./matrix-chart";
+import { VIEW_H, VIEW_W } from "./matrix-layout";
 
 export function MatrixHoverCard({
   item,
