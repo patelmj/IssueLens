@@ -14,8 +14,9 @@ def upgrade() -> None:
         "saved_views",
         sa.Column("position", sa.Integer(), nullable=False, server_default="0"),
     )
-    # Backfill: 0..n-1 within each repository, oldest first (matches the
-    # pre-position implicit ordering users saw least surprisingly).
+    # Backfill: assign positions 0..n-1 within each repository, ordered
+    # oldest-first by created_at (ties broken by id), per the spec's
+    # chosen ordering for saved views.
     op.execute(
         """
         UPDATE saved_views SET position = ranked.rn
