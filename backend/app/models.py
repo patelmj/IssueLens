@@ -206,6 +206,7 @@ class SavedView(Base):
         BigInteger, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=True
     )
     filters: Mapped[dict] = mapped_column(JSONB, default=dict)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
