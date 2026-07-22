@@ -196,6 +196,11 @@ async def _enqueue_rescore(repo_id: int) -> None:
     )
 
 
+async def _enqueue_sync(repo_id: int) -> None:
+    pool = await get_arq_pool()
+    await pool.enqueue_job("sync_repository", repo_id, _job_id=f"sync-repo-{repo_id}")
+
+
 async def push_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggestion:
     row = (
         await session.execute(
@@ -220,8 +225,17 @@ async def push_suggestion(session: AsyncSession, issue_id: int) -> IssueSuggesti
         except (httpx.HTTPError, GitHubRateLimited) as exc:
             raise GitHubWriteError(f"GitHub read failed (HTTP re-fetch); {exc}") from exc
         if (live.get("body") or "") != sug.base_body:
+            try:
+                await _enqueue_sync(repo.id)
+            except Exception:
+                logger.warning(
+                    "failed to enqueue mirror refresh for repo %s after write-safety conflict",
+                    repo.id,
+                    exc_info=True,
+                )
             raise SuggestionConflict(
-                "issue changed on GitHub since this suggestion was generated; regenerate"
+                "issue changed on GitHub since this suggestion was generated; "
+                "a mirror refresh has been queued — regenerate in a moment"
             )
         try:
             updated = await installation_patch(
