@@ -99,3 +99,47 @@ test("dragged bubble in a stacked pair renders at the raw pointer, exempt from n
   await page.mouse.up();
   await expect.poll(() => calls.pins.length).toBe(1);
 });
+
+test("neighbors reflow live around the dragged bubble, before drop", async ({ page }) => {
+  const calls = { pins: [] as unknown[] };
+  await stubStackedMatrix(page, calls);
+  await page.goto("/plan/matrix");
+  const bubble42 = page.getByTestId("bubble-42");
+  const bubble44 = page.getByTestId("bubble-44");
+  await expect(bubble42).toBeVisible();
+  await expect(bubble44).toBeVisible();
+
+  // record bubble 44's resting center BEFORE the drag starts
+  const preBox44 = (await bubble44.boundingBox())!;
+  const preCenter44 = { x: preBox44.x + preBox44.width / 2, y: preBox44.y + preBox44.height / 2 };
+
+  const box42 = (await bubble42.boundingBox())!;
+  const startX = box42.x + box42.width / 2;
+  const startY = box42.y + box42.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  // drag slowly, in two hops, toward bubble 44's resting position
+  await page.mouse.move(
+    startX + (preCenter44.x - startX) / 2,
+    startY + (preCenter44.y - startY) / 2,
+    { steps: 10 },
+  );
+  await page.mouse.move(preCenter44.x, preCenter44.y, { steps: 10 });
+
+  // mid-drag, before mouse.up: bubble 44 should already be moving out of the
+  // way live, not waiting for the drop. Allow for the 120ms transition.
+  await expect
+    .poll(
+      async () => {
+        const box = (await bubble44.boundingBox())!;
+        const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        return Math.hypot(center.x - preCenter44.x, center.y - preCenter44.y);
+      },
+      { timeout: 2000 },
+    )
+    .toBeGreaterThan(6);
+
+  await page.mouse.up();
+  await expect.poll(() => calls.pins.length).toBe(1);
+});

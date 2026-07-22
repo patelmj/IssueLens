@@ -44,7 +44,15 @@ export function MatrixChart({
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
-  const nudges = useMemo(() => resolveCollisions(plotted), [plotted]);
+  const layoutInput = useMemo(() => {
+    if (!drag?.moved) return plotted;
+    return plotted.map((item) =>
+      item.issue_id === drag.issueId
+        ? { ...item, u: drag.u, i: drag.i, pinned: true }
+        : item,
+    );
+  }, [plotted, drag]);
+  const nudges = useMemo(() => resolveCollisions(layoutInput), [layoutInput]);
   const popRank = useMemo(() => {
     const order = [...plotted].sort((a, b) => b.u + b.i - (a.u + a.i));
     return new Map(order.map((item, index) => [item.issue_id, index]));
@@ -183,8 +191,12 @@ export function MatrixChart({
             <g
               key={item.issue_id}
               data-testid={`bubble-${item.number}`}
-              className="matrix-bubble cursor-grab"
-              style={{ "--pop-delay": `${Math.min((popRank.get(item.issue_id) ?? 0) * 70, 1400)}ms` } as CSSProperties}
+              className={`matrix-bubble cursor-grab${dragging ? " matrix-bubble-dragging" : ""}`}
+              style={{
+                transform: `translate(${cx}px, ${cy}px)`,
+                transformOrigin: `${cx}px ${cy}px`,
+                "--pop-delay": `${Math.min((popRank.get(item.issue_id) ?? 0) * 70, 1400)}ms`,
+              } as CSSProperties}
               role="button"
               tabIndex={0}
               aria-label={`Issue #${item.number}: ${item.title}`}
@@ -204,8 +216,8 @@ export function MatrixChart({
             >
               {isSelected ? (
                 <circle
-                  cx={cx}
-                  cy={cy}
+                  cx={0}
+                  cy={0}
                   r={r + 1}
                   fill="none"
                   stroke="var(--color-primary)"
@@ -215,8 +227,8 @@ export function MatrixChart({
                 />
               ) : null}
               <circle
-                cx={cx}
-                cy={cy}
+                cx={0}
+                cy={0}
                 r={r}
                 fill={color}
                 fillOpacity={0.85}
@@ -224,8 +236,8 @@ export function MatrixChart({
                 strokeWidth={1.5}
               />
               <text
-                x={cx}
-                y={cy + 3.5}
+                x={0}
+                y={3.5}
                 textAnchor="middle"
                 fontSize={Math.max(8.5, Math.min(11, r * 0.85))}
                 fontWeight="500"
@@ -240,7 +252,7 @@ export function MatrixChart({
               {item.pinned ? (
                 <g
                   data-testid={`pin-badge-${item.number}`}
-                  transform={`translate(${cx + r * 0.72} ${cy - r * 0.72})`}
+                  transform={`translate(${r * 0.72} ${-r * 0.72})`}
                 >
                   <circle r={5.5} fill="var(--color-primary)" stroke="var(--color-surface)" strokeWidth={1.2} />
                   <g transform="rotate(45)">
