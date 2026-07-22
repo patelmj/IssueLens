@@ -100,3 +100,34 @@ test("empty state keeps the original copy", async ({ page }) => {
   await page.goto("/views");
   await expect(page.getByTestId("views-empty")).toContainText("No saved views yet");
 });
+
+test("rename cancel closes the form without a PATCH", async ({ page }) => {
+  const calls = { patches: [] as unknown[], deletes: [] as number[] };
+  await stubViews(page, calls);
+  await page.goto("/views");
+  await page.getByTestId("view-rename-1").click();
+  await expect(page.getByTestId("view-rename-input")).toBeVisible();
+  await page.getByTestId("view-rename-cancel").click();
+  await expect(page.getByTestId("view-rename-input")).not.toBeVisible();
+  await expect(page.getByTestId("view-row-1")).toContainText("Ready bugs");
+  expect(calls.patches.length).toBe(0);
+});
+
+test("stale action error clears when starting a new action", async ({ page }) => {
+  const calls = { patches: [] as unknown[], deletes: [] as number[] };
+  await stubViews(page, calls);
+  // make PATCH fail once to plant an error banner
+  await page.route(/\/api\/backend\/views\/1$/, (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({ status: 500, json: { detail: "boom" } })
+      : route.fallback(),
+  );
+  await page.goto("/views");
+  await page.getByTestId("view-rename-1").click();
+  await page.getByTestId("view-rename-input").fill("Broken");
+  await page.getByTestId("view-rename-save").click();
+  await expect(page.getByTestId("views-action-error")).toContainText("boom");
+  // arming a different action clears the stale banner
+  await page.getByTestId("view-delete-2").click();
+  await expect(page.getByTestId("views-action-error")).not.toBeVisible();
+});
