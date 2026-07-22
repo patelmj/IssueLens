@@ -31,8 +31,26 @@ MATRIX_VIEW = {
     "filters": {"types": ["bug"], "readiness": "ready"},
 }
 
+TABLE_VIEW = {
+    "name": "Readiness gaps",
+    "view_kind": "table",
+    "repository_id": 500,
+    "filters": {
+        "state": "open", "label": None, "assignee": None, "q": None,
+        "type": "bug", "component": None, "max_readiness": "50",
+        "sort": "readiness", "order": "asc",
+    },
+}
 
-async def test_create_and_list_newest_first(client, clean_db):
+BOARD_VIEW = {
+    "name": "By assignee",
+    "view_kind": "board",
+    "repository_id": 500,
+    "filters": {"lane_by": "assignee", "types": ["bug"], "readiness": None},
+}
+
+
+async def test_create_and_list_in_position_order(client, clean_db):
     await seed_repo()
     resp = await client.post("/views", json=MATRIX_VIEW)
     assert resp.status_code == 201
@@ -41,6 +59,7 @@ async def test_create_and_list_newest_first(client, clean_db):
     assert created["view_kind"] == "matrix"
     assert created["repository_id"] == 500
     assert created["filters"] == {"types": ["bug"], "readiness": "ready"}
+    assert created["position"] == 0
     assert created["id"] is not None
     assert created["created_at"] is not None
 
@@ -50,9 +69,11 @@ async def test_create_and_list_newest_first(client, clean_db):
               "filters": {"types": ["debt"], "readiness": None}},
     )
     assert resp2.status_code == 201
+    assert resp2.json()["position"] == 1
 
     listed = (await client.get("/views")).json()
-    assert [v["name"] for v in listed] == ["Debt only", "Ready bugs"]
+    assert [v["name"] for v in listed] == ["Ready bugs", "Debt only"]
+    assert [v["position"] for v in listed] == [0, 1]
 
 
 async def test_create_validation(client, clean_db):
@@ -153,3 +174,19 @@ def test_integrity_conflict_maps_unique_to_409_and_fk_to_404():
     missing = _integrity_conflict(fk, "matrix", "Dup")
     assert missing.status_code == 404
     assert missing.detail == "Unknown repository"
+
+
+async def test_create_table_and_board_kinds(client, clean_db):
+    await seed_repo()
+    for body in (TABLE_VIEW, BOARD_VIEW):
+        resp = await client.post("/views", json=body)
+        assert resp.status_code == 201, body["view_kind"]
+        assert resp.json()["view_kind"] == body["view_kind"]
+        assert resp.json()["filters"] == body["filters"]
+
+
+async def test_all_kinds_require_repository(client, clean_db):
+    await seed_repo()
+    for base in (MATRIX_VIEW, TABLE_VIEW, BOARD_VIEW):
+        resp = await client.post("/views", json={**base, "repository_id": None})
+        assert resp.status_code == 422, base["view_kind"]

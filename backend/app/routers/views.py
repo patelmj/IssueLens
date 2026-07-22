@@ -2,7 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,7 @@ from app.models import Repository, SavedView
 
 router = APIRouter(tags=["views"])
 
-VIEW_KINDS = {"matrix"}
+VIEW_KINDS = {"matrix", "table", "board"}
 
 
 class SavedViewOut(BaseModel):
@@ -20,6 +20,7 @@ class SavedViewOut(BaseModel):
     view_kind: str
     repository_id: int | None
     filters: dict
+    position: int
     created_at: datetime
 
 
@@ -63,6 +64,7 @@ def _to_out(view: SavedView) -> SavedViewOut:
         view_kind=view.view_kind,
         repository_id=view.repository_id,
         filters=view.filters,
+        position=view.position,
         created_at=view.created_at,
     )
 
@@ -73,7 +75,7 @@ async def list_views(session: AsyncSession = Depends(get_session)) -> list[Saved
         (
             await session.execute(
                 select(SavedView).order_by(
-                    SavedView.created_at.desc(), SavedView.id.desc()
+                    SavedView.repository_id, SavedView.position, SavedView.id
                 )
             )
         )
@@ -92,23 +94,28 @@ async def create_view(
         raise HTTPException(
             status_code=422, detail=f"Unknown view kind: {body.view_kind}"
         )
-    if body.view_kind == "matrix" and body.repository_id is None:
-        raise HTTPException(
-            status_code=422, detail="Matrix views require a repository"
+    if body.repository_id is None:
+        raise HTTPException(status_code=422, detail="Views require a repository")
+    repo = (
+        await session.execute(
+            select(Repository).where(Repository.id == body.repository_id)
         )
-    if body.repository_id is not None:
-        repo = (
-            await session.execute(
-                select(Repository).where(Repository.id == body.repository_id)
+    ).scalar_one_or_none()
+    if repo is None:
+        raise HTTPException(status_code=404, detail="Unknown repository")
+    max_position = (
+        await session.execute(
+            select(func.max(SavedView.position)).where(
+                SavedView.repository_id == body.repository_id
             )
-        ).scalar_one_or_none()
-        if repo is None:
-            raise HTTPException(status_code=404, detail="Unknown repository")
+        )
+    ).scalar_one()
     view = SavedView(
         name=name,
         view_kind=body.view_kind,
         repository_id=body.repository_id,
         filters=body.filters,
+        position=0 if max_position is None else max_position + 1,
     )
     session.add(view)
     try:
