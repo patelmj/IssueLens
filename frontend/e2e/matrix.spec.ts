@@ -131,7 +131,7 @@ test("dragging a bubble pins it: PUT sent, ring + toast shown, queue reflows", a
   const sent = calls.pins[0] as { urgency: number; importance: number };
   expect(sent.urgency).toBeLessThan(80);
   expect(sent.importance).toBeLessThan(70);
-  await expect(page.getByTestId("pin-ring-42")).toBeVisible();
+  await expect(page.getByTestId("pin-badge-42")).toBeVisible();
   await expect(page.getByTestId("pin-toast")).toBeVisible();
   // pinned issue moved out of Do First — the quadrant group is empty and
   // unmounted entirely (execution-queue.tsx renders `null` for empty groups),
@@ -150,14 +150,14 @@ test("release to AI restores computed placement", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(box.x - 250, box.y + 200, { steps: 8 });
   await page.mouse.up();
-  await expect(page.getByTestId("pin-ring-42")).toBeVisible();
+  await expect(page.getByTestId("pin-badge-42")).toBeVisible();
 
   // drag auto-selects the just-pinned bubble → toast appears immediately
   await expect(page.getByTestId("pin-toast")).toBeVisible();
   await page.getByTestId("release-pin").click();
   await expect.poll(() => calls.releases).toBe(1);
   await expect(page.getByTestId("pin-error")).not.toBeVisible();
-  await expect(page.getByTestId("pin-ring-42")).not.toBeVisible();
+  await expect(page.getByTestId("pin-badge-42")).not.toBeVisible();
   await expect(page.getByTestId("qgroup-dofirst")).toContainText("#42");
 });
 

@@ -7,6 +7,7 @@ import {
   seriesOf,
   type PlottedItem,
 } from "./matrix-types";
+import { PinGlyph } from "./pin-glyph";
 
 const PLOT_W = PLOT.right - PLOT.left; // 790
 const PLOT_H = PLOT.bottom - PLOT.top; // 496
@@ -115,6 +116,9 @@ export function MatrixChart({
               <stop offset="1" stopColor={`var(--quad-${q.key}-strong)`} stopOpacity={0} />
             </radialGradient>
           ))}
+          <filter id="select-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="3.2" />
+          </filter>
         </defs>
         {QUADRANTS.map((q) => (
           <g key={q.label}>
@@ -191,27 +195,26 @@ export function MatrixChart({
                 }
               }}
             >
-              {item.pinned ? (
+              {isSelected ? (
                 <circle
-                  data-testid={`pin-ring-${item.number}`}
                   cx={cx}
                   cy={cy}
-                  r={r + 5}
+                  r={r + 1}
                   fill="none"
-                  stroke="var(--pin-ring)"
-                  strokeDasharray="4 3"
+                  stroke="var(--color-primary)"
+                  strokeWidth={5}
+                  opacity={0.35}
+                  filter="url(#select-glow)"
                 />
-              ) : null}
-              {isSelected ? (
-                <circle cx={cx} cy={cy} r={r + 9} fill="none" stroke="var(--color-primary)" strokeWidth="1.5" />
               ) : null}
               <circle
                 cx={cx}
                 cy={cy}
                 r={r}
                 fill={color}
-                stroke="var(--color-surface)"
-                strokeWidth="2"
+                fillOpacity={0.85}
+                stroke={color}
+                strokeWidth={1.5}
               />
               <text
                 x={cx}
@@ -221,12 +224,24 @@ export function MatrixChart({
                 fontWeight="500"
                 fill="var(--color-text)"
                 stroke="var(--color-surface)"
-                strokeWidth="2"
+                strokeWidth="1.5"
                 paintOrder="stroke"
                 style={{ fontVariantNumeric: "tabular-nums", pointerEvents: "none" }}
               >
                 {item.number}
               </text>
+              {item.pinned ? (
+                <g
+                  data-testid={`pin-badge-${item.number}`}
+                  transform={`translate(${cx + r * 0.72} ${cy - r * 0.72})`}
+                >
+                  <circle r={5.5} fill="var(--color-primary)" stroke="var(--color-surface)" strokeWidth={1.2} />
+                  <g transform="rotate(45)">
+                    <line y1={0.6} y2={3.4} stroke="#fff" strokeWidth={1.2} />
+                    <circle cy={-1.2} r={1.9} fill="#fff" />
+                  </g>
+                </g>
+              ) : null}
             </g>
           );
         })}
@@ -243,7 +258,9 @@ export function MatrixChart({
           </span>
         ))}
         <span className="grow" />
-        <span className="text-(--color-text-muted)">size = effort · dashed ring = pinned</span>
+        <span className="flex items-center gap-1 text-(--color-text-muted)">
+          size = effort · <PinGlyph className="inline-block h-3 w-3" /> = pinned
+        </span>
       </div>
     </div>
   );

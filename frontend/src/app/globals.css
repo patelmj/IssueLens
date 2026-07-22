@@ -33,7 +33,6 @@
   --quad-dofirst-label: rgba(209, 36, 47, 0.9);
   --quad-delegate-label: rgba(27, 124, 131, 0.9);
   --quad-reconsider-label: rgba(110, 112, 118, 0.9);
-  --pin-ring: #17181c;
 }
 
 :root[data-mode="dark"] {
@@ -67,7 +66,6 @@
   --quad-dofirst-label: rgba(244, 112, 103, 0.9);
   --quad-delegate-label: rgba(57, 197, 207, 0.9);
   --quad-reconsider-label: rgba(150, 152, 161, 0.9);
-  --pin-ring: #ededf0;
 }
 
 body {
