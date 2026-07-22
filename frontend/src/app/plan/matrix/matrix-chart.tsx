@@ -184,7 +184,7 @@ export function MatrixChart({
               key={item.issue_id}
               data-testid={`bubble-${item.number}`}
               className="matrix-bubble cursor-grab"
-              style={{ "--pop-delay": `${(popRank.get(item.issue_id) ?? 0) * 70}ms` } as CSSProperties}
+              style={{ "--pop-delay": `${Math.min((popRank.get(item.issue_id) ?? 0) * 70, 1400)}ms` } as CSSProperties}
               role="button"
               tabIndex={0}
               aria-label={`Issue #${item.number}: ${item.title}`}
