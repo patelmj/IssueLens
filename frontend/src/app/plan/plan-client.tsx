@@ -4,7 +4,12 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useState } from "react";
+import { SaveViewButton } from "../../components/save-view";
 import { getJson } from "../../lib/api";
+import {
+  hasActiveTableFilters,
+  parseTableFilters,
+} from "../../lib/table-filters";
 import { relativeTime } from "../../lib/time";
 import { PlanTabs } from "./plan-tabs";
 import { ReadinessDrawer } from "./readiness-drawer";
@@ -151,6 +156,7 @@ export function PlanClient() {
   const sort = (searchParams.get("sort") ?? "updated") as SortKey;
   const order = searchParams.get("order") ?? "desc";
   const offset = Math.max(0, Number(searchParams.get("offset") ?? "0") || 0);
+  const tableViewFilters = parseTableFilters(searchParams);
 
   const backendQuery = new URLSearchParams({
     state,
@@ -233,6 +239,14 @@ export function PlanClient() {
         }}
         visible={visible}
         onToggleColumn={onToggleColumn}
+        saveSlot={
+          <SaveViewButton
+            viewKind="table"
+            repositoryId={repoId ? Number(repoId) : null}
+            canSave={!!repoId && hasActiveTableFilters(tableViewFilters)}
+            filters={{ ...tableViewFilters }}
+          />
+        }
       />
 
       {isPending || reposPending ? (

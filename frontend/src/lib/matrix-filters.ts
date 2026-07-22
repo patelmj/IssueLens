@@ -36,7 +36,7 @@ export type MatrixFilters = {
 
 export const NO_FILTERS: MatrixFilters = { types: [], readiness: null };
 
-type ParamSource = { get(name: string): string | null };
+export type ParamSource = { get(name: string): string | null };
 
 /** Unknown or malformed values are ignored — never a crash. */
 export function parseFilters(params: ParamSource): MatrixFilters {

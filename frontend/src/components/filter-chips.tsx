@@ -10,7 +10,7 @@ import {
   NO_FILTERS,
   type MatrixFilters,
   type TypeFilter,
-} from "../../../lib/matrix-filters";
+} from "../lib/matrix-filters";
 
 const chipBase = "rounded-lg border px-2.5 py-1.5 transition-all duration-150";
 const chipIdle =

@@ -95,6 +95,7 @@ When explaining research papers, use this format:
 ## Testing
 
 - All UI testing must be done using **Playwright CLI** (not manual browser testing)
+- **Stopping a background `npm run dev` task on Windows orphans the node child** — the shell dies but the dev server keeps listening on :3005 and degrades over time (pages ~1.6s, proxy ~4s vs 25ms/11ms healthy). After stopping dev-server work, verify no listener remains (`netstat -ano | findstr :3005`) and `Stop-Process` the node PID if one does. A degraded orphan also breaks later e2e runs the same way a stale `issuelens-frontend-1` container does.
 
 ## Git Workflow
 

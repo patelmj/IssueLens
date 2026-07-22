@@ -8,8 +8,17 @@ import {
 } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { getJson, sendJson } from "../../../lib/api";
+import {
+  boardFiltersToSearch,
+  hasActiveBoardFilters,
+  parseBoardFilters,
+  type BoardViewFilters,
+} from "../../../lib/board-filters";
+import { hasActiveFilters, matchesFilters } from "../../../lib/matrix-filters";
+import { FilterChips } from "../../../components/filter-chips";
+import { SaveViewButton } from "../../../components/save-view";
 import { PlanTabs } from "../plan-tabs";
 import { BoardCard } from "./board-card";
 import {
@@ -17,7 +26,6 @@ import {
   lanesFor,
   movedPayload,
   type KanbanPayload,
-  type LaneBy,
   type WorkflowColumn,
 } from "./board-types";
 
@@ -39,6 +47,19 @@ export function BoardClient() {
   const repoId = repoParam ? Number(repoParam) : (repos?.[0]?.id ?? null);
   const kanbanKey = ["kanban", repoId] as const;
 
+  const boardFilters = parseBoardFilters(searchParams);
+  const laneBy = boardFilters.lane_by;
+
+  const navigateWith = useCallback(
+    (nextRepoId: number | null, next: BoardViewFilters) => {
+      const search = boardFiltersToSearch(nextRepoId, next);
+      router.replace(search ? `/plan/board?${search}` : "/plan/board", {
+        scroll: false,
+      });
+    },
+    [router],
+  );
+
   const { data, error, isPending } = useQuery({
     queryKey: kanbanKey,
     queryFn: () => getJson<KanbanPayload>(`/api/backend/repositories/${repoId}/kanban`),
@@ -49,7 +70,6 @@ export function BoardClient() {
   const queryClient = useQueryClient();
   const [dropTarget, setDropTarget] = useState<WorkflowColumn | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
-  const [laneBy, setLaneBy] = useState<LaneBy>("none");
 
   const moveMutation = useMutation({
     mutationFn: ({ issueId, column }: { issueId: number; column: WorkflowColumn }) =>
@@ -87,7 +107,27 @@ export function BoardClient() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: kanbanKey }),
   });
 
-  const lanes = data ? lanesFor(data, laneBy) : [];
+  // Chips filter client-side; the kanban cache always holds the full payload,
+  // so optimistic move/reset updates stay filter-agnostic.
+  const chipsActive = hasActiveFilters(boardFilters);
+  const filteredData =
+    data && chipsActive
+      ? {
+          ...data,
+          columns: data.columns.map((col) => ({
+            ...col,
+            cards: col.cards.filter((c) =>
+              matchesFilters(
+                { issue_type: c.issue_type, readiness_score: c.readiness_pct },
+                boardFilters,
+              ),
+            ),
+          })),
+        }
+      : data;
+  const shownCount =
+    filteredData?.columns.reduce((n, col) => n + col.cards.length, 0) ?? 0;
+  const lanes = filteredData ? lanesFor(filteredData, laneBy) : [];
 
   return (
     <div className="flex flex-col gap-4" data-testid="board-content">
@@ -100,16 +140,13 @@ export function BoardClient() {
         <PlanTabs />
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           aria-label="Repository"
           className="rounded-lg border border-(--color-border) bg-(--color-surface) px-2.5 py-1.5"
           value={repoId ?? ""}
           onChange={(e) =>
-            router.replace(
-              e.target.value ? `/plan/board?repo_id=${e.target.value}` : "/plan/board",
-              { scroll: false },
-            )
+            navigateWith(e.target.value ? Number(e.target.value) : null, boardFilters)
           }
         >
           {(repos ?? []).map((repo) => (
@@ -138,12 +175,31 @@ export function BoardClient() {
                   ? "bg-(--accent-tint) font-medium text-(--color-primary)"
                   : "text-(--color-text-muted) hover:text-(--color-text)"
               }`}
-              onClick={() => setLaneBy(value)}
+              onClick={() => navigateWith(repoId, { ...boardFilters, lane_by: value })}
             >
               {label}
             </button>
           ))}
         </div>
+        <FilterChips
+          filters={{ types: boardFilters.types, readiness: boardFilters.readiness }}
+          onChange={(next) => navigateWith(repoId, { ...next, lane_by: laneBy })}
+        />
+        {chipsActive && data ? (
+          <span className="text-(--color-text-muted)" data-testid="board-filter-count">
+            {shownCount} of {data.total} shown
+          </span>
+        ) : null}
+        <SaveViewButton
+          viewKind="board"
+          repositoryId={repoId}
+          canSave={repoId != null && hasActiveBoardFilters(boardFilters)}
+          filters={{
+            lane_by: boardFilters.lane_by,
+            types: boardFilters.types,
+            readiness: boardFilters.readiness,
+          }}
+        />
         {moveError ? (
           <span className="text-(--color-danger)" data-testid="move-error">
             {moveError}

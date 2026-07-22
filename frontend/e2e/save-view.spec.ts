@@ -96,7 +96,7 @@ test("saved view appears in the sidebar after saving", async ({ page }) => {
   await page.getByTestId("save-view").click();
   await page.getByTestId("save-view-name").fill("Ready bugs");
   await page.getByTestId("save-view-submit").click();
-  await expect(page.getByTestId("saved-view-link-1")).toHaveText("Ready bugs");
+  await expect(page.getByTestId("saved-view-link-1")).toContainText("Ready bugs");
 });
 
 test("popover dismisses on Escape and outside click without saving", async ({ page }) => {

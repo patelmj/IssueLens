@@ -21,8 +21,8 @@ import {
   type MatrixPayload,
   type PlottedItem,
 } from "./matrix-types";
-import { FilterChips } from "./filter-chips";
-import { SaveViewButton } from "./save-view";
+import { FilterChips } from "../../../components/filter-chips";
+import { SaveViewButton } from "../../../components/save-view";
 import {
   applyFilters,
   filtersToSearch,
@@ -175,7 +175,12 @@ export function MatrixClient() {
             {plotted.length} of {allPlottedCount} shown
           </span>
         ) : null}
-        <SaveViewButton repoId={repoId} filters={filters} />
+        <SaveViewButton
+          viewKind="matrix"
+          repositoryId={repoId}
+          canSave={repoId != null && hasActiveFilters(filters)}
+          filters={{ types: filters.types, readiness: filters.readiness }}
+        />
         {data && data.unscored > 0 ? (
           <span
             className="rounded-full border border-(--color-border) px-2 py-0.5 text-[10px] text-(--color-text-muted)"
