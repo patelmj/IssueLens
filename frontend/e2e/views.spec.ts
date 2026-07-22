@@ -6,6 +6,7 @@ type View = {
   view_kind: string;
   repository_id: number | null;
   filters: unknown;
+  position: number;
   created_at: string;
 };
 
@@ -16,6 +17,7 @@ const initialViews: View[] = [
     view_kind: "matrix",
     repository_id: 500,
     filters: { types: ["bug"], readiness: "ready" },
+    position: 0,
     created_at: "2026-07-21T00:00:00Z",
   },
   {
@@ -24,7 +26,26 @@ const initialViews: View[] = [
     view_kind: "matrix",
     repository_id: 500,
     filters: { types: ["docs"], readiness: null },
+    position: 1,
     created_at: "2026-07-20T00:00:00Z",
+  },
+  {
+    id: 3,
+    name: "By assignee",
+    view_kind: "board",
+    repository_id: 500,
+    filters: { lane_by: "assignee", types: ["bug"], readiness: null },
+    position: 2,
+    created_at: "2026-07-22T00:00:00Z",
+  },
+  {
+    id: 4,
+    name: "Readiness gaps",
+    view_kind: "table",
+    repository_id: 600,
+    filters: { type: "bug", max_readiness: "50", sort: "readiness", order: "asc" },
+    position: 0,
+    created_at: "2026-07-22T00:00:00Z",
   },
 ];
 
@@ -32,7 +53,12 @@ const initialViews: View[] = [
 async function stubViews(page: Page, calls: { patches: unknown[]; deletes: number[] }) {
   let views: View[] = structuredClone(initialViews);
   await page.route(/\/api\/backend\/repositories$/, (route: Route) =>
-    route.fulfill({ json: [{ id: 500, full_name: "patelmj/mehova" }] }),
+    route.fulfill({
+      json: [
+        { id: 500, full_name: "patelmj/mehova" },
+        { id: 600, full_name: "patelmj/issuelens" },
+      ],
+    }),
   );
   await page.route(/\/api\/backend\/views$/, (route: Route) =>
     route.fulfill({ json: views }),
@@ -51,19 +77,40 @@ async function stubViews(page: Page, calls: { patches: unknown[]; deletes: numbe
   });
 }
 
-test("lists views with repo, summary, and open link", async ({ page }) => {
+test("groups views by repo with kind badges, summaries, and open links", async ({
+  page,
+}) => {
   await stubViews(page, { patches: [], deletes: [] });
   await page.goto("/views");
-  const row = page.getByTestId("view-row-1");
-  await expect(row).toContainText("Ready bugs");
-  await expect(row).toContainText("patelmj/mehova");
-  await expect(row).toContainText("Bug · Ready (≥80)");
-  await expect(row).toContainText("Matrix");
+
+  const mehova = page.getByTestId("views-repo-500");
+  await expect(mehova).toContainText("patelmj/mehova");
+  const row1 = page.getByTestId("view-row-1");
+  await expect(row1).toContainText("Ready bugs");
+  await expect(row1).toContainText("Bug · Ready (≥80)");
+  await expect(row1).toContainText("Matrix");
   await expect(page.getByTestId("view-open-1")).toHaveAttribute(
     "href",
     "/plan/matrix?repo_id=500&types=bug&readiness=ready",
   );
-  await expect(page.getByTestId("view-row-2")).toContainText("Docs pile");
+
+  const row3 = page.getByTestId("view-row-3");
+  await expect(row3).toContainText("Board");
+  await expect(row3).toContainText("Laned by assignee · Bug");
+  await expect(page.getByTestId("view-open-3")).toHaveAttribute(
+    "href",
+    "/plan/board?repo_id=500&types=bug&lane_by=assignee",
+  );
+
+  const issuelens = page.getByTestId("views-repo-600");
+  await expect(issuelens).toContainText("patelmj/issuelens");
+  const row4 = page.getByTestId("view-row-4");
+  await expect(row4).toContainText("Table");
+  await expect(row4).toContainText("Open · bug · readiness <50% · by readiness ↑");
+  await expect(page.getByTestId("view-open-4")).toHaveAttribute(
+    "href",
+    "/plan?repo_id=600&type=bug&max_readiness=50&sort=readiness&order=asc",
+  );
 });
 
 test("rename sends PATCH and updates the list", async ({ page }) => {
