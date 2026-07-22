@@ -2,33 +2,36 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { sendJson } from "../../../lib/api";
-import { hasActiveFilters, type MatrixFilters } from "../../../lib/matrix-filters";
-import { VIEWS_KEY, type SavedView } from "../../../lib/views";
+import { sendJson } from "../lib/api";
+import { VIEWS_KEY, type SavedView } from "../lib/views";
 
 const panel =
   "absolute right-0 top-full z-30 mt-1 flex w-60 flex-col gap-2 rounded-lg border border-(--color-border) bg-(--color-surface) p-2.5 shadow-(--shadow-card)";
 
 export function SaveViewButton({
-  repoId,
+  viewKind,
+  repositoryId,
   filters,
+  canSave,
 }: {
-  repoId: number | null;
-  filters: MatrixFilters;
+  viewKind: string;
+  repositoryId: number | null;
+  /** Kind-specific snapshot persisted verbatim as the view's JSONB filters. */
+  filters: Record<string, unknown>;
+  canSave: boolean;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
-  const canSave = repoId != null && hasActiveFilters(filters);
 
   const mutation = useMutation({
     mutationFn: () =>
       sendJson<SavedView>("/api/backend/views", "POST", {
         name: name.trim(),
-        view_kind: "matrix",
-        repository_id: repoId,
-        filters: { types: filters.types, readiness: filters.readiness },
+        view_kind: viewKind,
+        repository_id: repositoryId,
+        filters,
       }),
     onSuccess: () => {
       setOpen(false);
