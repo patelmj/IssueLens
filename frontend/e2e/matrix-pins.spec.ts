@@ -75,3 +75,31 @@ test("queue rows mark pinned issues and release inline", async ({ page }) => {
   const rowClasses = (await page.getByTestId("qrow-42").getAttribute("class")) ?? "";
   expect(rowClasses.split(/\s+/)).not.toContain("bg-(--accent-tint)");
 });
+
+test("pinned chip counts pins and releases all after confirm", async ({ page }) => {
+  const released: number[] = [];
+  await stubPinnedMatrix(page, released);
+  await page.goto("/plan/matrix");
+
+  const chip = page.getByTestId("pinned-chip");
+  await expect(chip).toContainText("2 pinned");
+
+  await page.getByTestId("release-all").click();
+  await expect(chip).toContainText("Release all 2?");
+  await page.getByTestId("release-all-confirm").click();
+
+  await expect.poll(() => [...released].sort()).toEqual([1, 2]);
+  await expect(chip).not.toBeVisible();
+  await expect(page.getByTestId("pin-badge-42")).not.toBeVisible();
+  await expect(page.getByTestId("pin-badge-43")).not.toBeVisible();
+});
+
+test("pinned chip confirm step can be dismissed", async ({ page }) => {
+  const released: number[] = [];
+  await stubPinnedMatrix(page, released);
+  await page.goto("/plan/matrix");
+  await page.getByTestId("release-all").click();
+  await page.getByLabel("Cancel release all").click();
+  await expect(page.getByTestId("pinned-chip")).toContainText("2 pinned");
+  expect(released).toEqual([]);
+});

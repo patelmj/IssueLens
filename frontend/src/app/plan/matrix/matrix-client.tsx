@@ -22,6 +22,7 @@ import {
   type PlottedItem,
 } from "./matrix-types";
 import { FilterChips } from "../../../components/filter-chips";
+import { PinGlyph } from "./pin-glyph";
 import { SaveViewButton } from "../../../components/save-view";
 import {
   applyFilters,
@@ -72,6 +73,7 @@ export function MatrixClient() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [hover, setHover] = useState<{ item: PlottedItem; cx: number; cy: number } | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [confirmingReleaseAll, setConfirmingReleaseAll] = useState(false);
 
   const patchItem = useCallback(
     (issueId: number, patch: Partial<MatrixItem>) => {
@@ -133,7 +135,34 @@ export function MatrixClient() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: matrixKey }),
   });
 
+  const releaseAllMutation = useMutation({
+    mutationFn: (issueIds: number[]) =>
+      Promise.all(
+        issueIds.map((issueId) =>
+          sendJson<undefined>(`/api/backend/issues/${issueId}/pin`, "DELETE"),
+        ),
+      ),
+    onMutate: async (issueIds) => {
+      await queryClient.cancelQueries({ queryKey: matrixKey });
+      const previous = queryClient.getQueryData<MatrixPayload>(matrixKey);
+      for (const issueId of issueIds) {
+        patchItem(issueId, { pinned: false, pinned_urgency: null, pinned_importance: null });
+      }
+      setMutationError(null);
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(matrixKey, context.previous);
+      setMutationError(err.message);
+    },
+    onSettled: () => {
+      setConfirmingReleaseAll(false);
+      return queryClient.invalidateQueries({ queryKey: matrixKey });
+    },
+  });
+
   const items = data?.items ?? [];
+  const pinnedItems = items.filter((item) => item.pinned);
   const filtersActive = hasActiveFilters(filters);
   const filtered = applyFilters(items, filters);
   const plotted = toPlotted(filtered);
@@ -173,6 +202,46 @@ export function MatrixClient() {
         {filtersActive && data ? (
           <span className="text-(--color-text-muted)" data-testid="filter-count">
             {plotted.length} of {allPlottedCount} shown
+          </span>
+        ) : null}
+        {pinnedItems.length > 0 ? (
+          <span
+            data-testid="pinned-chip"
+            className="flex items-center gap-1.5 rounded-full border border-(--color-border) px-2 py-0.5 text-(--color-text-muted)"
+          >
+            <PinGlyph className="h-3 w-3 shrink-0" />
+            {confirmingReleaseAll ? (
+              <>
+                <span>Release all {pinnedItems.length}?</span>
+                <button
+                  type="button"
+                  data-testid="release-all-confirm"
+                  className="text-(--color-primary) transition-all duration-150 hover:underline"
+                  onClick={() =>
+                    releaseAllMutation.mutate(pinnedItems.map((item) => item.issue_id))
+                  }
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  aria-label="Cancel release all"
+                  className="transition-all duration-150 hover:text-(--color-text)"
+                  onClick={() => setConfirmingReleaseAll(false)}
+                >
+                  ✕
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                data-testid="release-all"
+                className="transition-all duration-150 hover:text-(--color-text)"
+                onClick={() => setConfirmingReleaseAll(true)}
+              >
+                {pinnedItems.length} pinned
+              </button>
+            )}
           </span>
         ) : null}
         <SaveViewButton
