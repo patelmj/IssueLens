@@ -247,6 +247,15 @@ async def test_push_write_safety_409_when_github_body_changed(clean_db, api, app
     await seed_readiness()
     await api.post("/issues/1/suggestion")
 
+    fake_pool = _FakePool()
+
+    async def fake_get_pool():
+        return fake_pool
+
+    from app.triage import service
+
+    monkeypatch.setattr(service, "get_arq_pool", fake_get_pool)
+
     _token_route()
     respx.get("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
         return_value=httpx.Response(200, json={"number": 1, "body": "SOMEONE ELSE EDITED THIS"})
@@ -254,6 +263,33 @@ async def test_push_write_safety_409_when_github_body_changed(clean_db, api, app
     resp = await api.post("/issues/1/suggestion/push")
     assert resp.status_code == 409
     assert "changed on GitHub" in resp.json()["detail"]
+    # the conflict queues a mirror refresh so "regenerate" stops being a dead end
+    assert fake_pool.jobs == [
+        (("sync_repository", 500), {"_job_id": "sync-repo-500"})
+    ]
+
+
+@respx.mock
+async def test_push_409_survives_refresh_enqueue_failure(clean_db, api, app_creds, monkeypatch):  # noqa: F811
+    await seed_issues()
+    await _set_issue_body("Auth fails after refresh.")
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    async def broken_get_pool():
+        raise RuntimeError("redis down")
+
+    from app.triage import service
+
+    monkeypatch.setattr(service, "get_arq_pool", broken_get_pool)
+
+    _token_route()
+    respx.get("https://api.github.com/repos/patelmj/mehova/issues/1").mock(
+        return_value=httpx.Response(200, json={"number": 1, "body": "SOMEONE ELSE EDITED THIS"})
+    )
+    resp = await api.post("/issues/1/suggestion/push")
+    assert resp.status_code == 409
 
 
 @respx.mock

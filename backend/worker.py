@@ -134,6 +134,53 @@ async def score_all_repositories(ctx: dict) -> int:
     return done
 
 
+STUCK_JOB_THRESHOLD_MINUTES = 60
+
+
+async def expire_stuck_sync_jobs(ctx: dict) -> int:
+    """Terminal record for SyncJobs stuck in 'running' (worker died or DB failed mid-job)."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select, update
+
+    from app.models import Repository, SyncJob
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=STUCK_JOB_THRESHOLD_MINUTES)
+    expired = 0
+    async with get_sessionmaker()() as session:
+        stuck = list(
+            (
+                await session.execute(
+                    select(SyncJob).where(
+                        SyncJob.status == "running", SyncJob.started_at < cutoff
+                    )
+                )
+            ).scalars()
+        )
+        for job in stuck:
+            message = (
+                f"expired: stuck in running for over {STUCK_JOB_THRESHOLD_MINUTES} minutes"
+            )
+            job.status = "error"
+            job.error = message
+            job.finished_at = now
+            if job.kind in ("full", "incremental"):
+                await session.execute(
+                    update(Repository)
+                    .where(
+                        Repository.id == job.repository_id,
+                        Repository.sync_status == "syncing",
+                    )
+                    .values(sync_status="error", sync_error=message)
+                )
+            expired += 1
+        if stuck:
+            await session.commit()
+            logger.warning("expired %s stuck sync job(s)", expired)
+    return expired
+
+
 class WorkerSettings:
     functions = [
         func(ping, keep_result=60),
@@ -147,6 +194,7 @@ class WorkerSettings:
         cron(classify_all_repositories, name="classify_all_repositories", minute={15, 45}),
         cron(score_all_repositories, name="score_all_repositories", minute={20, 50}),
         cron(priority_all_repositories, name="priority_all_repositories", minute={25, 55}),
+        cron(expire_stuck_sync_jobs, name="expire_stuck_sync_jobs", minute={10, 40}),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     # keep_result=0: results are never read, and a retained result key would

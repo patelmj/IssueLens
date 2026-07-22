@@ -202,12 +202,20 @@ async def score_repository_issues(
         await session.commit()
         return scored
     except Exception as exc:
-        await session.rollback()
-        job = (
-            await session.execute(select(SyncJob).where(SyncJob.id == job_id))
-        ).scalar_one()
-        job.status = "error"
-        job.error = str(exc)[:500]
-        job.finished_at = func.now()
-        await session.commit()
+        try:
+            await session.rollback()
+            job = (
+                await session.execute(select(SyncJob).where(SyncJob.id == job_id))
+            ).scalar_one()
+            job.status = "error"
+            job.error = str(exc)[:500]
+            job.finished_at = func.now()
+            await session.commit()
+        except Exception:
+            logger.exception(
+                "failed to record error state for sync job %s (repo %s); "
+                "stuck-job sweep will expire it",
+                job_id,
+                repo_id,
+            )
         raise

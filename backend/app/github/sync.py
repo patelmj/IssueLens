@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.github.client import app_get, installation_get_paginated
 from app.models import Installation, Issue, Repository, SyncJob
+
+logger = logging.getLogger(__name__)
 
 SINCE_OVERLAP = timedelta(minutes=5)
 
@@ -83,6 +86,7 @@ def _issue_values(item: dict[str, Any], repo_id: int) -> dict[str, Any]:
         ],
         "assignees": [a["login"] for a in item.get("assignees", [])],
         "milestone_title": (item.get("milestone") or {}).get("title"),
+        "milestone_due_on": _parse_ts((item.get("milestone") or {}).get("due_on")),
         "comments_count": item.get("comments", 0),
         "is_pull_request": "pull_request" in item,
         "gh_created_at": _parse_ts(item["created_at"]),
@@ -150,17 +154,25 @@ async def sync_repository_issues(
         await session.commit()
         return len(raw_issues)
     except Exception as exc:
-        await session.rollback()
-        repo = (
-            await session.execute(select(Repository).where(Repository.id == repo_id))
-        ).scalar_one()
-        job = (
-            await session.execute(select(SyncJob).where(SyncJob.id == job_id))
-        ).scalar_one()
-        repo.sync_status = "error"
-        repo.sync_error = str(exc)[:500]
-        job.status = "error"
-        job.error = str(exc)[:500]
-        job.finished_at = func.now()
-        await session.commit()
+        try:
+            await session.rollback()
+            repo = (
+                await session.execute(select(Repository).where(Repository.id == repo_id))
+            ).scalar_one()
+            job = (
+                await session.execute(select(SyncJob).where(SyncJob.id == job_id))
+            ).scalar_one()
+            repo.sync_status = "error"
+            repo.sync_error = str(exc)[:500]
+            job.status = "error"
+            job.error = str(exc)[:500]
+            job.finished_at = func.now()
+            await session.commit()
+        except Exception:
+            logger.exception(
+                "failed to record error state for sync job %s (repo %s); "
+                "stuck-job sweep will expire it",
+                job_id,
+                repo_id,
+            )
         raise
