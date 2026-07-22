@@ -109,14 +109,22 @@ export function Sidenav() {
   });
 
   const allViews = views ?? [];
-  // Repo groups in API repo order; flat fallback while repos are unavailable.
+  const matchedRepoIds = new Set((repos ?? []).map((repo) => repo.id));
+  const unmatchedViews = allViews.filter(
+    (view) => view.repository_id == null || !matchedRepoIds.has(view.repository_id),
+  );
+  // Repo groups in API repo order; views with no matching repo trail ungrouped;
+  // flat fallback while repos are unavailable.
   const groups: { label: string | null; views: SavedView[] }[] = repos
-    ? repos
-        .map((repo) => ({
-          label: repo.full_name.split("/")[1] ?? repo.full_name,
-          views: allViews.filter((view) => view.repository_id === repo.id),
-        }))
-        .filter((group) => group.views.length > 0)
+    ? [
+        ...repos
+          .map((repo) => ({
+            label: repo.full_name.split("/")[1] ?? repo.full_name,
+            views: allViews.filter((view) => view.repository_id === repo.id),
+          }))
+          .filter((group) => group.views.length > 0),
+        ...(unmatchedViews.length ? [{ label: null, views: unmatchedViews }] : []),
+      ]
     : allViews.length
       ? [{ label: null, views: allViews }]
       : [];

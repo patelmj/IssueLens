@@ -59,6 +59,15 @@ const views = [
     position: 2,
     created_at: "2026-07-22T00:00:00Z",
   },
+  {
+    id: 4,
+    name: "Orphan view",
+    view_kind: "matrix",
+    repository_id: 999,
+    filters: { types: ["docs"], readiness: null },
+    position: 0,
+    created_at: "2026-07-22T00:00:00Z",
+  },
 ];
 
 async function stubAll(page: Page) {
@@ -83,7 +92,8 @@ test("sidebar lists saved views grouped by repo with a live count pill", async (
   await expect(nav.getByTestId("saved-view-link-2")).toContainText("Docs pile");
   await expect(nav.getByTestId("saved-view-link-3")).toContainText("Readiness gaps");
   await expect(nav).toContainText("mehova");
-  await expect(nav.getByTestId("views-count")).toHaveText("3");
+  await expect(nav.getByTestId("saved-view-link-4")).toContainText("Orphan view");
+  await expect(nav.getByTestId("views-count")).toHaveText("4");
 });
 
 test("clicking a saved view navigates and applies its filters", async ({ page }) => {
