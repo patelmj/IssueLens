@@ -120,3 +120,26 @@ body {
     animation: none;
   }
 }
+.rail-slide-in {
+  animation: rail-slide-in 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes rail-slide-in {
+  0% {
+    translate: 100% 0;
+  }
+}
+.rail-slide-back {
+  animation: rail-slide-back 0.2s ease-out both;
+}
+@keyframes rail-slide-back {
+  0% {
+    translate: -16px 0;
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-slide-in,
+  .rail-slide-back {
+    animation: none;
+  }
+}

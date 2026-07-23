@@ -57,6 +57,7 @@ export function MatrixChart({
     const order = [...plotted].sort((a, b) => b.u + b.i - (a.u + a.i));
     return new Map(order.map((item, index) => [item.issue_id, index]));
   }, [plotted]);
+  const popStep = Math.min(70, 1400 / Math.max(plotted.length - 1, 1));
 
   const clientToChart = (e: PointerEvent): { u: number; i: number } => {
     const rect = svgRef.current!.getBoundingClientRect();
@@ -195,7 +196,7 @@ export function MatrixChart({
               style={{
                 transform: `translate(${cx}px, ${cy}px)`,
                 transformOrigin: `${cx}px ${cy}px`,
-                "--pop-delay": `${Math.min((popRank.get(item.issue_id) ?? 0) * 70, 1400)}ms`,
+                "--pop-delay": `${Math.round((popRank.get(item.issue_id) ?? 0) * popStep)}ms`,
               } as CSSProperties}
               role="button"
               tabIndex={0}

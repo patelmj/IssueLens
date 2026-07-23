@@ -30,7 +30,7 @@ export function RightRailSlot({ fallback }: { fallback: ReactNode }) {
   const rail = useContext(RailContext);
   return (
     <>
-      <div id={SLOT_ID} />
+      <div id={SLOT_ID} className="overflow-x-clip" />
       {rail?.active ? null : fallback}
     </>
   );

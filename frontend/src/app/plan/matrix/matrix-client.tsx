@@ -370,17 +370,21 @@ export function MatrixClient() {
           </div>
           <RightRail>
             {detailIssueId != null ? (
-              <IssueDetailPanel
-                issueId={detailIssueId}
-                onBack={() => setDetailIssueId(null)}
-              />
+              <div className="rail-slide-in">
+                <IssueDetailPanel
+                  issueId={detailIssueId}
+                  onBack={() => setDetailIssueId(null)}
+                />
+              </div>
             ) : (
-              <ExecutionQueue
-                plotted={plotted}
-                selectedId={selectedId}
-                onOpen={openDetail}
-                onRelease={(issueId) => releaseMutation.mutate(issueId)}
-              />
+              <div className="rail-slide-back">
+                <ExecutionQueue
+                  plotted={plotted}
+                  selectedId={selectedId}
+                  onOpen={openDetail}
+                  onRelease={(issueId) => releaseMutation.mutate(issueId)}
+                />
+              </div>
             )}
           </RightRail>
           {selected?.pinned ? (
