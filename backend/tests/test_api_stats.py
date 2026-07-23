@@ -13,7 +13,9 @@ from app.models import (
     IssuePriorityPin,
     IssueReadiness,
     Repository,
+    SyncJob,
 )
+from tests.test_api_issues import seed_classifications, seed_issues, seed_readiness
 
 NOW = datetime.now(timezone.utc)
 
@@ -82,6 +84,9 @@ async def test_overview_stats_empty_db(clean_db, api):
         "activity": [],
         "do_first": [],
         "minimap": [],
+        "triage": {"count": 0, "top": []},
+        "sync": {"status": "healthy", "last_synced_at": None, "visible_repos": 0},
+        "events": [],
     }
 
 
@@ -276,3 +281,67 @@ async def test_do_first_excludes_hidden_repos(api, clean_db):
     ids = [d["issue_id"] for d in body["do_first"]]
     assert 9004 not in ids
     assert ids == [9001, 9003, 9006, 9007]
+
+
+async def test_triage_teaser_matches_inbox_threshold80(api, clean_db):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()  # issue 1 -> 42 (below 80), issue 4 -> 88 (above)
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    assert body["triage"] == {"count": 1, "top": [{"readiness": 42}]}
+
+
+async def seed_sync_jobs(*jobs: SyncJob) -> None:
+    async with get_sessionmaker()() as session:
+        session.add_all(list(jobs))
+        await session.commit()
+
+
+async def test_sync_health_states(api, clean_db):
+    await seed_overview_data()
+    await seed_sync_jobs(
+        SyncJob(repository_id=500, kind="sync", status="success",
+                started_at=NOW - timedelta(minutes=10), finished_at=NOW - timedelta(minutes=9)),
+    )
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    assert body["sync"]["status"] == "healthy"
+    assert body["sync"]["visible_repos"] == 2
+
+    await seed_sync_jobs(
+        SyncJob(repository_id=500, kind="sync", status="error", error="boom",
+                started_at=NOW - timedelta(minutes=5), finished_at=NOW - timedelta(minutes=4)),
+    )
+    # api is a single AsyncClient instance already closed by the previous `async
+    # with` block above; httpx clients can't be reopened, so build a fresh one.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        body = (await client.get("/stats/overview")).json()
+    assert body["sync"]["status"] == "error"
+
+    await seed_sync_jobs(
+        SyncJob(repository_id=500, kind="sync", status="running",
+                started_at=NOW - timedelta(minutes=1)),
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        body = (await client.get("/stats/overview")).json()
+    assert body["sync"]["status"] == "syncing"
+
+
+async def test_events_interleaved_desc_capped_at_8(api, clean_db):
+    await seed_overview_data()
+    await seed_sync_jobs(
+        SyncJob(repository_id=500, kind="sync", status="success",
+                started_at=NOW - timedelta(minutes=3), finished_at=NOW - timedelta(minutes=2)),
+    )
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    events = body["events"]
+    assert len(events) <= 8
+    assert events[0]["kind"] == "synced"
+    assert events[0]["text"] == "Synced patelmj/mehova"
+    kinds = {e["kind"] for e in events}
+    assert "opened" in kinds
+    assert "closed" in kinds
+    ats = [e["at"] for e in events]
+    assert ats == sorted(ats, reverse=True)

@@ -14,13 +14,18 @@ from app.models import (
     IssuePriorityPin,
     IssueReadiness,
     Repository,
+    SyncJob,
 )
+from app.triage.service import inbox
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 ACTIVITY_DAYS = 30
 TOP_REPOS_LIMIT = 5
 DO_FIRST_LIMIT = 4
+TRIAGE_TEASER_THRESHOLD = 80
+TRIAGE_TEASER_BARS = 3
+EVENTS_LIMIT = 8
 
 
 class TopRepo(BaseModel):
@@ -54,6 +59,27 @@ class MinimapPoint(BaseModel):
     estimate: int
 
 
+class TriageTop(BaseModel):
+    readiness: int
+
+
+class TriageTeaser(BaseModel):
+    count: int
+    top: list[TriageTop]
+
+
+class SyncHealth(BaseModel):
+    status: str  # "healthy" | "syncing" | "error"
+    last_synced_at: datetime | None
+    visible_repos: int
+
+
+class ActivityEvent(BaseModel):
+    kind: str  # "opened" | "closed" | "synced"
+    text: str
+    at: datetime
+
+
 class OverviewStats(BaseModel):
     connected_repos: int
     open_issues: int
@@ -62,6 +88,9 @@ class OverviewStats(BaseModel):
     activity: list[ActivityDay]
     do_first: list[DoFirstItem]
     minimap: list[MinimapPoint]
+    triage: TriageTeaser
+    sync: SyncHealth
+    events: list[ActivityEvent]
 
 
 async def _matrix_snapshot(
@@ -113,6 +142,91 @@ async def _matrix_snapshot(
             )
     candidates.sort(key=lambda item: (-item.score, item.issue_id))
     return candidates[:DO_FIRST_LIMIT], minimap
+
+
+async def _triage_teaser(session: AsyncSession) -> TriageTeaser:
+    items, total = await inbox(
+        session, repo_id=None, issue_type=None,
+        threshold=TRIAGE_TEASER_THRESHOLD, limit=TRIAGE_TEASER_BARS, offset=0,
+    )
+    return TriageTeaser(
+        count=total,
+        top=[TriageTop(readiness=item["readiness_score"]) for item in items],
+    )
+
+
+async def _sync_health(
+    session: AsyncSession, last_synced_at: datetime | None, visible_repos: int
+) -> SyncHealth:
+    running = (
+        await session.execute(
+            select(func.count())
+            .select_from(SyncJob)
+            .join(Repository, SyncJob.repository_id == Repository.id)
+            .where(Repository.visible.is_(True), SyncJob.status == "running")
+        )
+    ).scalar_one()
+    if running:
+        status = "syncing"
+    else:
+        latest = (
+            await session.execute(
+                select(SyncJob.status)
+                .join(Repository, SyncJob.repository_id == Repository.id)
+                .where(Repository.visible.is_(True))
+                .order_by(SyncJob.started_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        status = "error" if latest == "error" else "healthy"
+    return SyncHealth(
+        status=status, last_synced_at=last_synced_at, visible_repos=visible_repos
+    )
+
+
+async def _recent_events(session: AsyncSession) -> list[ActivityEvent]:
+    opened_rows = (
+        await session.execute(
+            select(Issue.number, Issue.title, Issue.gh_created_at)
+            .join(Repository, Issue.repository_id == Repository.id)
+            .where(Issue.is_pull_request.is_(False), Repository.visible.is_(True))
+            .order_by(Issue.gh_created_at.desc())
+            .limit(EVENTS_LIMIT)
+        )
+    ).all()
+    closed_rows = (
+        await session.execute(
+            select(Issue.number, Issue.title, Issue.gh_closed_at)
+            .join(Repository, Issue.repository_id == Repository.id)
+            .where(
+                Issue.is_pull_request.is_(False),
+                Issue.gh_closed_at.is_not(None),
+                Repository.visible.is_(True),
+            )
+            .order_by(Issue.gh_closed_at.desc())
+            .limit(EVENTS_LIMIT)
+        )
+    ).all()
+    sync_rows = (
+        await session.execute(
+            select(Repository.full_name, SyncJob.finished_at)
+            .join(Repository, SyncJob.repository_id == Repository.id)
+            .where(
+                SyncJob.status == "success",
+                SyncJob.finished_at.is_not(None),
+                Repository.visible.is_(True),
+            )
+            .order_by(SyncJob.finished_at.desc())
+            .limit(EVENTS_LIMIT)
+        )
+    ).all()
+    events = (
+        [ActivityEvent(kind="opened", text=f"#{n} {t}", at=at) for n, t, at in opened_rows]
+        + [ActivityEvent(kind="closed", text=f"#{n} {t}", at=at) for n, t, at in closed_rows]
+        + [ActivityEvent(kind="synced", text=f"Synced {name}", at=at) for name, at in sync_rows]
+    )
+    events.sort(key=lambda event: event.at, reverse=True)
+    return events[:EVENTS_LIMIT]
 
 
 @router.get("/overview", response_model=OverviewStats)
@@ -192,6 +306,9 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
         for day, (opened, closed) in sorted(counts.items())
     ]
     do_first, minimap = await _matrix_snapshot(session)
+    triage = await _triage_teaser(session)
+    sync = await _sync_health(session, last_synced_at, connected_repos)
+    events = await _recent_events(session)
     return OverviewStats(
         connected_repos=connected_repos,
         open_issues=open_issues,
@@ -203,4 +320,7 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
         activity=activity,
         do_first=do_first,
         minimap=minimap,
+        triage=triage,
+        sync=sync,
+        events=events,
     )
