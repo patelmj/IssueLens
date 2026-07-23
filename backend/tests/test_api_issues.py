@@ -5,7 +5,14 @@ from httpx import ASGITransport, AsyncClient
 
 from app.db import get_sessionmaker
 from app.main import app
-from app.models import Installation, Issue, IssueClassification, IssueReadiness, Repository
+from app.models import (
+    Installation,
+    Issue,
+    IssueClassification,
+    IssuePriority,
+    IssueReadiness,
+    Repository,
+)
 
 NOW = datetime.now(timezone.utc)
 
@@ -348,3 +355,77 @@ async def test_facets_components_exclude_hidden_repos(clean_db, api):
     await hide_repo(500)
     body = await get_body(api, "/issues/facets")
     assert body["components"] == ["sync"]
+
+
+async def seed_priority():
+    async with get_sessionmaker()() as session:
+        session.add(
+            IssuePriority(
+                issue_id=1, urgency=80, importance=70,
+                factors=[
+                    {"axis": "urgency", "sign": "+", "text": "Priority P0 set",
+                     "source": "signal", "weight": 30},
+                    {"axis": "importance", "sign": "-", "text": "No milestone",
+                     "source": "llm", "weight": 0},
+                ],
+                model="test-model",
+                issue_gh_updated_at=NOW - timedelta(days=1),
+            )
+        )
+        await session.commit()
+
+
+async def set_issue_body(issue_id: int, body: str) -> None:
+    async with get_sessionmaker()() as session:
+        issue = await session.get(Issue, issue_id)
+        issue.body = body
+        await session.commit()
+
+
+async def test_issue_detail_full_payload(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await seed_priority()
+    await set_issue_body(1, "## Repro\n\n1. Log in")
+    body = await get_body(api, "/issues/1")
+    assert body["number"] == 1
+    assert body["title"] == "Alpha bug"
+    assert body["body"] == "## Repro\n\n1. Log in"
+    assert body["repo_full_name"] == "patelmj/mehova"
+    assert body["html_url"] == "https://github.com/patelmj/mehova/issues/1"
+    assert body["state"] == "open"
+    assert body["author_login"] == "patelmj"
+    assert body["labels"] == [{"name": "bug", "color": "d73a4a"}]
+    assert body["assignees"] == ["patelmj"]
+    assert body["comments_count"] == 5
+    assert body["classification"] == {
+        "issue_type": "bug", "component": "auth", "confidence": 0.9,
+    }
+    assert body["priority"]["urgency"] == 80
+    assert body["priority"]["importance"] == 70
+    assert body["priority"]["factors"][0]["text"] == "Priority P0 set"
+    assert body["readiness"]["score"] == 42
+    assert body["readiness"]["factors"][1]["present"] is False
+
+
+async def test_issue_detail_partial_intelligence_is_null(clean_db, api):
+    await seed_issues()
+    body = await get_body(api, "/issues/2")
+    assert body["title"] == "Beta feature"
+    assert body["body"] is None
+    assert body["classification"] is None
+    assert body["priority"] is None
+    assert body["readiness"] is None
+
+
+async def test_issue_detail_404(clean_db, api):
+    await seed_issues()
+    async with api as client:
+        assert (await client.get("/issues/99999")).status_code == 404
+
+
+async def test_issue_detail_route_does_not_shadow_facets(clean_db, api):
+    await seed_issues()
+    body = await get_body(api, "/issues/facets")
+    assert "labels" in body

@@ -7,7 +7,7 @@ from sqlalchemy import Select, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.models import Issue, IssueClassification, IssueReadiness, Repository
+from app.models import Issue, IssueClassification, IssuePriority, IssueReadiness, Repository
 
 router = APIRouter(prefix="/issues", tags=["issues"])
 
@@ -246,4 +246,122 @@ async def issue_readiness(
         issue_type=row.issue_type,
         scored_at=row.scored_at,
         factors=[FactorOut(**f) for f in row.factors],
+    )
+
+
+class PriorityFactorOut(BaseModel):
+    axis: Literal["urgency", "importance"]
+    sign: Literal["+", "-"]
+    text: str
+    source: Literal["signal", "llm"]
+    weight: float
+
+
+class ClassificationDetail(BaseModel):
+    issue_type: str
+    component: str | None
+    confidence: float
+
+
+class PriorityDetail(BaseModel):
+    urgency: int
+    importance: int
+    factors: list[PriorityFactorOut]
+
+
+class ReadinessDetail(BaseModel):
+    score: int
+    issue_type: str
+    factors: list[FactorOut]
+
+
+class IssueDetailOut(BaseModel):
+    id: int
+    repository_id: int
+    repo_full_name: str
+    html_url: str
+    number: int
+    title: str
+    body: str | None
+    state: str
+    author_login: str
+    labels: list[dict]
+    assignees: list[str]
+    milestone_title: str | None
+    comments_count: int
+    gh_created_at: datetime
+    gh_updated_at: datetime
+    gh_closed_at: datetime | None
+    classification: ClassificationDetail | None
+    priority: PriorityDetail | None
+    readiness: ReadinessDetail | None
+
+
+@router.get("/{issue_id}", response_model=IssueDetailOut)
+async def issue_detail(
+    issue_id: int, session: AsyncSession = Depends(get_session)
+) -> IssueDetailOut:
+    row = (
+        await session.execute(
+            select(
+                Issue,
+                Repository.full_name,
+                IssueClassification,
+                IssueReadiness,
+                IssuePriority,
+            )
+            .join(Repository, Issue.repository_id == Repository.id)
+            .outerjoin(IssueClassification, IssueClassification.issue_id == Issue.id)
+            .outerjoin(IssueReadiness, IssueReadiness.issue_id == Issue.id)
+            .outerjoin(IssuePriority, IssuePriority.issue_id == Issue.id)
+            .where(Issue.id == issue_id)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    issue, full_name, classification, readiness, priority = row
+    return IssueDetailOut(
+        id=issue.id,
+        repository_id=issue.repository_id,
+        repo_full_name=full_name,
+        html_url=f"https://github.com/{full_name}/issues/{issue.number}",
+        number=issue.number,
+        title=issue.title,
+        body=issue.body,
+        state=issue.state,
+        author_login=issue.author_login,
+        labels=issue.labels,
+        assignees=issue.assignees,
+        milestone_title=issue.milestone_title,
+        comments_count=issue.comments_count,
+        gh_created_at=issue.gh_created_at,
+        gh_updated_at=issue.gh_updated_at,
+        gh_closed_at=issue.gh_closed_at,
+        classification=(
+            ClassificationDetail(
+                issue_type=classification.issue_type,
+                component=classification.component,
+                confidence=classification.confidence,
+            )
+            if classification
+            else None
+        ),
+        priority=(
+            PriorityDetail(
+                urgency=priority.urgency,
+                importance=priority.importance,
+                factors=[PriorityFactorOut(**f) for f in priority.factors],
+            )
+            if priority
+            else None
+        ),
+        readiness=(
+            ReadinessDetail(
+                score=readiness.score,
+                issue_type=readiness.issue_type,
+                factors=[FactorOut(**f) for f in readiness.factors],
+            )
+            if readiness
+            else None
+        ),
     )
