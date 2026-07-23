@@ -1,53 +1,26 @@
 import { expect, test } from "@playwright/test";
+import { emptyStats, fullStats } from "./fixtures/overview-stats";
 
-const stats = {
-  connected_repos: 2,
-  open_issues: 94,
-  last_synced_at: new Date(Date.now() - 5 * 60_000).toISOString(),
-  top_repos: [
-    { id: 1, full_name: "patelmj/mehova", open_issues_count: 80 },
-    { id: 2, full_name: "patelmj/IssueLens", open_issues_count: 14 },
-  ],
-  activity: [
-    {
-      date: new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10),
-      opened: 3,
-      closed: 1,
-    },
-    {
-      date: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
-      opened: 0,
-      closed: 2,
-    },
-  ],
-};
+const stubStats = (page: import("@playwright/test").Page, json: unknown) =>
+  page.route(/\/api\/backend\/stats\/overview/, (route) => route.fulfill({ json }));
 
-test("overview renders live stat tiles", async ({ page }) => {
-  await page.route(/\/api\/backend\/stats\/overview/, (route) =>
-    route.fulfill({ json: stats }),
-  );
+test("health band renders four trend tiles", async ({ page }) => {
+  await stubStats(page, fullStats);
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Overview");
-  await expect(page.getByTestId("overview-content").getByText("94")).toBeVisible();
-  await expect(page.getByText("patelmj/mehova")).toBeVisible();
-  await expect(page.getByText("5m ago")).toBeVisible();
-  await expect(
-    page.getByRole("img", { name: /issues opened and closed per day/i }),
-  ).toBeVisible();
+  const band = page.getByTestId("health-band");
+  await expect(band.getByTestId("tile-open")).toContainText("128");
+  await expect(band.getByTestId("tile-open").locator("svg")).toBeVisible();
+  await expect(band.getByTestId("tile-closed-week")).toContainText("14");
+  await expect(band.getByTestId("tile-closed-week")).toContainText("▲ 3");
+  await expect(band.getByTestId("tile-median-age")).toContainText("9.4d");
+  await expect(band.getByTestId("tile-stale")).toContainText("5");
+  // old tiles are gone
+  await expect(page.getByText("Connected repos")).toHaveCount(0);
+  await expect(page.getByText("Biggest repo")).toHaveCount(0);
 });
 
-test("overview empty state points at repositories", async ({ page }) => {
-  await page.route(/\/api\/backend\/stats\/overview/, (route) =>
-    route.fulfill({
-      json: {
-        connected_repos: 0,
-        open_issues: 0,
-        last_synced_at: null,
-        top_repos: [],
-        activity: [],
-      },
-    }),
-  );
+test("empty state still shows connect CTA", async ({ page }) => {
+  await stubStats(page, emptyStats);
   await page.goto("/");
   await expect(
     page.getByText("Connect GitHub to see your issue landscape"),
