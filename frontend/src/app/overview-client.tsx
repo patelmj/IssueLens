@@ -7,6 +7,9 @@ import { getJson } from "../lib/api";
 import { ActivityChart } from "../components/activity-chart";
 import { IssueDetailPanel } from "../components/issue-detail-panel";
 import { DoFirstSpotlight } from "../components/overview/do-first-spotlight";
+import { MatrixMinimap } from "../components/overview/matrix-minimap";
+import { TriageTeaserCard } from "../components/overview/triage-teaser";
+import { SyncHealthCard } from "../components/overview/sync-health";
 import { RightRail } from "../components/right-rail";
 import { Sparkline } from "../components/sparkline";
 import type { OverviewStats } from "../components/overview/types";
@@ -113,7 +116,11 @@ export function OverviewClient() {
             <div className="col-span-2">
               <DoFirstSpotlight items={data.do_first} onOpen={setDetailIssueId} />
             </div>
-            <div className="flex flex-col gap-4" data-testid="overview-side-stack" />
+            <div className="flex flex-col gap-4" data-testid="overview-side-stack">
+              <MatrixMinimap points={data.minimap} />
+              <TriageTeaserCard teaser={data.triage} />
+              <SyncHealthCard sync={data.sync} />
+            </div>
           </div>
           <div data-testid="health-band" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <TrendTile
