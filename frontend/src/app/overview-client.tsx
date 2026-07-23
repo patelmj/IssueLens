@@ -2,8 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { getJson } from "../lib/api";
 import { ActivityChart } from "../components/activity-chart";
+import { IssueDetailPanel } from "../components/issue-detail-panel";
+import { DoFirstSpotlight } from "../components/overview/do-first-spotlight";
+import { RightRail } from "../components/right-rail";
 import { Sparkline } from "../components/sparkline";
 import type { OverviewStats } from "../components/overview/types";
 
@@ -60,6 +64,17 @@ export function OverviewClient() {
   const trend = data?.open_trend ?? [];
   const weekDelta = trend.length >= 8 ? trend[trend.length - 1] - trend[trend.length - 8] : 0;
 
+  const [detailIssueId, setDetailIssueId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (detailIssueId == null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetailIssueId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detailIssueId]);
+
   return (
     <div className="flex flex-col gap-4" data-testid="overview-content">
       <div className="flex items-baseline gap-3">
@@ -94,6 +109,12 @@ export function OverviewClient() {
         </div>
       ) : (
         <>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2">
+              <DoFirstSpotlight items={data.do_first} onOpen={setDetailIssueId} />
+            </div>
+            <div className="flex flex-col gap-4" data-testid="overview-side-stack" />
+          </div>
           <div data-testid="health-band" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <TrendTile
               testId="tile-open"
@@ -156,6 +177,13 @@ export function OverviewClient() {
               ))}
             </ul>
           </div>
+          {detailIssueId != null ? (
+            <RightRail>
+              <div className="rail-slide-in">
+                <IssueDetailPanel issueId={detailIssueId} onBack={() => setDetailIssueId(null)} />
+              </div>
+            </RightRail>
+          ) : null}
         </>
       )}
     </div>
