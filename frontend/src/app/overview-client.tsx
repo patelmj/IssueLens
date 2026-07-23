@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { getJson } from "../lib/api";
 import { ActivityChart } from "../components/activity-chart";
 import { IssueDetailPanel } from "../components/issue-detail-panel";
+import { ActivityStream } from "../components/overview/activity-stream";
 import { DoFirstSpotlight } from "../components/overview/do-first-spotlight";
 import { MatrixMinimap } from "../components/overview/matrix-minimap";
 import { TriageTeaserCard } from "../components/overview/triage-teaser";
@@ -112,7 +113,7 @@ export function OverviewClient() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="overview-rise grid grid-cols-3 gap-4">
             <div className="col-span-2">
               <DoFirstSpotlight items={data.do_first} onOpen={setDetailIssueId} />
             </div>
@@ -122,7 +123,11 @@ export function OverviewClient() {
               <SyncHealthCard sync={data.sync} />
             </div>
           </div>
-          <div data-testid="health-band" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div
+            data-testid="health-band"
+            className="overview-rise grid grid-cols-2 gap-3 lg:grid-cols-4"
+            style={{ "--rise-delay": "60ms" } as React.CSSProperties}
+          >
             <TrendTile
               testId="tile-open"
               label="Open issues"
@@ -151,38 +156,18 @@ export function OverviewClient() {
               value={String(data.stale_count)}
             />
           </div>
-          <div className={`${card} px-4 py-3`}>
-            <div className="flex items-baseline justify-between pb-1">
-              <span className="text-sm font-medium">Opened vs closed</span>
-              <span className="text-(--color-text-muted)">last 30 days</span>
+          <div
+            className="overview-rise grid grid-cols-3 gap-4"
+            style={{ "--rise-delay": "120ms" } as React.CSSProperties}
+          >
+            <div className={`${card} col-span-2 px-4 py-3`}>
+              <div className="flex items-baseline justify-between pb-1">
+                <span className="text-sm font-medium">Opened vs closed</span>
+                <span className="text-(--color-text-muted)">last 30 days</span>
+              </div>
+              <ActivityChart data={data.activity} />
             </div>
-            <ActivityChart data={data.activity} />
-          </div>
-          <div className={`${card} px-4 py-3`}>
-            <div className="flex items-baseline justify-between pb-2">
-              <span className="text-sm font-medium">Repositories</span>
-              <Link
-                href="/repositories"
-                className="text-(--color-primary) hover:underline"
-              >
-                View all →
-              </Link>
-            </div>
-            <ul className="flex flex-col gap-1.5">
-              {data.top_repos.map((repo) => (
-                <li key={repo.id} className="flex items-center gap-3">
-                  <Link
-                    href={`/plan?repo_id=${repo.id}`}
-                    className="font-medium hover:text-(--color-primary)"
-                  >
-                    {repo.full_name}
-                  </Link>
-                  <span className="text-(--color-text-muted)">
-                    {repo.open_issues_count} open
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <ActivityStream events={data.events} />
           </div>
           {detailIssueId != null ? (
             <RightRail>
