@@ -429,3 +429,10 @@ async def test_issue_detail_route_does_not_shadow_facets(clean_db, api):
     await seed_issues()
     body = await get_body(api, "/issues/facets")
     assert "labels" in body
+
+
+async def test_issue_detail_serves_hidden_repo_issue(clean_db, api):
+    await seed_issues()
+    await hide_repo(500)
+    body = await get_body(api, "/issues/1")
+    assert body["title"] == "Alpha bug"
