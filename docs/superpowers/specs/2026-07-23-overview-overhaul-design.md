@@ -19,6 +19,8 @@ Decided during brainstorm:
 - **Spotlight click:** opens the #52 issue detail drawer in place on the Overview.
 - **Deletion:** the "Repositories" list card and "Biggest repo" tile leave the page —
   repo navigation lives in the sidebar and /repositories.
+- **Additions (second brainstorm pass):** a live matrix minimap in the hero side
+  stack and a stale-work stat tile in the health band.
 
 ## Page Skeleton
 
@@ -26,10 +28,10 @@ Three bands, top to bottom (desktop; bands stack on narrow viewports):
 
 ```mermaid
 block-beta
-  columns 3
-  spotlight["Do-First spotlight (hero)"]:2 side["Triage teaser\n+ Sync health"]:1
-  s1["Open issues\n(sparkline)"] s2["Closed this week\n(sparkline)"] s3["Median open age"]
-  chart["Opened vs closed (existing chart)"]:2 stream["Activity stream"]:1
+  columns 4
+  spotlight["Do-First spotlight (hero)"]:3 side["Matrix minimap\n+ Triage teaser\n+ Sync health"]:1
+  s1["Open issues\n(sparkline)"] s2["Closed this week\n(sparkline)"] s3["Median open age"] s4["Stale 30d+"]
+  chart["Opened vs closed (existing chart)"]:3 stream["Activity stream"]:1
 ```
 
 All cards keep the standard treatment: 14px radius, `--color-surface`,
@@ -41,8 +43,9 @@ All cards keep the standard treatment: 14px radius, `--color-surface`,
 
 - Top **4** open issues in the matrix's **Do First** quadrant, ordered by priority
   score descending.
-- Each row: type-colored dot **sized by effort** (same visual language as matrix
-  bubbles), issue title, repo short name, readiness mini-bar, relative age.
+- Each row: type-colored dot **sized by estimate** (same `radiusOf(estimate)`
+  visual language as matrix bubbles), issue title, repo short name, readiness
+  mini-bar, relative age.
 - Card treatment: subtle red-wash gradient (`--quad-dofirst-strong` at low alpha
   fading into surface) + a do-first accent edge; "View matrix →" link in the header.
 - **Click row → issue detail drawer** (the #52 component) slides in on the Overview,
@@ -52,6 +55,13 @@ All cards keep the standard treatment: 14px radius, `--color-surface`,
 
 ### Side stack (≈1/3 width)
 
+- **Matrix minimap (top of stack):** a small non-interactive thumbnail of the
+  priority matrix — the four quadrant washes (`--quad-*-strong` at reduced alpha)
+  plus one dot per prioritized open issue at its urgency/importance position,
+  colored by the `--pm-*` palette and faintly sized by estimate. No labels, no
+  drag, no tooltips; the whole card is a single click target → /plan. It sits
+  directly beside the Do-First spotlight and visually explains where that list
+  comes from. Empty state: washes only, muted "No prioritized issues yet".
 - **Triage teaser:** count of issues awaiting triage (same predicate as the /triage
   inbox list — one number, one source of truth) + readiness bars for the top 3;
   the whole card links to /triage. Empty state: "Queue clear" muted.
@@ -65,6 +75,7 @@ All cards keep the standard treatment: 14px radius, `--color-surface`,
 | Open issues | current count | 30-day trajectory sparkline + week-over-week delta arrow |
 | Closed this week | count | delta vs previous week |
 | Median open age | days | no sparkline |
+| Stale 30d+ | open issues with `gh_updated_at` older than 30 days | no sparkline; uses the existing `ix_issues_gh_updated_at_not_pr` index |
 
 Open-issue trajectory is derived server-side: current count walked backwards
 through the daily opened/closed net — no schema change. Delta arrows use
@@ -89,6 +100,8 @@ sync:            {status: "healthy"|"syncing"|"error", last_synced_at, visible_r
 open_trend:      [int]        # 30 daily points, derived from current count + activity net
 closed_week:     {count, delta}
 median_age_days: float | null
+stale_count:     int          # open, not PR, gh_updated_at > 30 days old
+minimap:         [{u, i, type, estimate}]   # all prioritized open issues, compact
 events:          [{kind: "opened"|"closed"|"synced", text, at}]                           # last 8
 ```
 
@@ -112,7 +125,8 @@ matching the existing endpoint's filters. No new tables, no new endpoints.
   (no priorities / no readiness / no sync jobs), hidden-repo exclusion, PR exclusion.
 - **Frontend (Playwright):** spotlight renders top Do-First issues and clicking a row
   opens the detail drawer on the Overview; triage teaser navigates to /triage;
-  empty states render visible-but-muted; stat tiles show sparklines and deltas.
+  minimap renders dots and clicks through to /plan; empty states render
+  visible-but-muted; stat tiles show sparklines, deltas, and the stale count.
 - Full suite + lint before PR, per house workflow.
 
 ## Out of Scope
