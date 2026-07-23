@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -26,6 +26,7 @@ DO_FIRST_LIMIT = 4
 TRIAGE_TEASER_THRESHOLD = 80
 TRIAGE_TEASER_BARS = 3
 EVENTS_LIMIT = 8
+STALE_DAYS = 30
 
 
 class TopRepo(BaseModel):
@@ -80,6 +81,11 @@ class ActivityEvent(BaseModel):
     at: datetime
 
 
+class ClosedWeek(BaseModel):
+    count: int
+    delta: int
+
+
 class OverviewStats(BaseModel):
     connected_repos: int
     open_issues: int
@@ -91,6 +97,10 @@ class OverviewStats(BaseModel):
     triage: TriageTeaser
     sync: SyncHealth
     events: list[ActivityEvent]
+    open_trend: list[int]
+    closed_week: ClosedWeek
+    median_age_days: float | None
+    stale_count: int
 
 
 async def _matrix_snapshot(
@@ -229,6 +239,79 @@ async def _recent_events(session: AsyncSession) -> list[ActivityEvent]:
     return events[:EVENTS_LIMIT]
 
 
+def _open_trend(open_now: int, activity: list[ActivityDay], today: date) -> list[int]:
+    day_net = {a.date: (a.opened, a.closed) for a in activity}
+    trend: list[int] = []
+    count = open_now
+    for offset in range(ACTIVITY_DAYS):
+        day = (today - timedelta(days=offset)).isoformat()
+        trend.append(count)
+        opened_n, closed_n = day_net.get(day, (0, 0))
+        count = count - opened_n + closed_n
+    trend.reverse()
+    return trend
+
+
+async def _flow_stats(session: AsyncSession) -> tuple[ClosedWeek, float | None, int]:
+    now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+    two_weeks_ago = now - timedelta(days=14)
+
+    def closed_since(lo: datetime, hi: datetime | None = None):
+        query = (
+            select(func.count())
+            .select_from(Issue)
+            .join(Repository, Issue.repository_id == Repository.id)
+            .where(
+                Issue.is_pull_request.is_(False),
+                Issue.gh_closed_at.is_not(None),
+                Issue.gh_closed_at >= lo,
+                Repository.visible.is_(True),
+            )
+        )
+        return query.where(Issue.gh_closed_at < hi) if hi is not None else query
+
+    closed_this = (await session.execute(closed_since(week_ago))).scalar_one()
+    closed_prev = (await session.execute(closed_since(two_weeks_ago, week_ago))).scalar_one()
+    median_seconds = (
+        await session.execute(
+            select(
+                func.percentile_cont(0.5).within_group(
+                    func.extract("epoch", func.now() - Issue.gh_created_at)
+                )
+            )
+            .select_from(Issue)
+            .join(Repository, Issue.repository_id == Repository.id)
+            .where(
+                Issue.state == "open",
+                Issue.is_pull_request.is_(False),
+                Repository.visible.is_(True),
+            )
+        )
+    ).scalar_one()
+    median_age_days = (
+        round(float(median_seconds) / 86400, 1) if median_seconds is not None else None
+    )
+    stale_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(Issue)
+            .join(Repository, Issue.repository_id == Repository.id)
+            .where(
+                Issue.state == "open",
+                Issue.is_pull_request.is_(False),
+                Issue.gh_updated_at < now - timedelta(days=STALE_DAYS),
+                Repository.visible.is_(True),
+            )
+        )
+    ).scalar_one()
+    return (
+        ClosedWeek(count=closed_this, delta=closed_this - closed_prev),
+        median_age_days,
+        stale_count,
+    )
+
+
 @router.get("/overview", response_model=OverviewStats)
 async def overview_stats(session: AsyncSession = Depends(get_session)) -> OverviewStats:
     connected_repos = (
@@ -309,6 +392,8 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
     triage = await _triage_teaser(session)
     sync = await _sync_health(session, last_synced_at, connected_repos)
     events = await _recent_events(session)
+    closed_week, median_age_days, stale_count = await _flow_stats(session)
+    open_trend = _open_trend(open_issues, activity, datetime.now(timezone.utc).date())
     return OverviewStats(
         connected_repos=connected_repos,
         open_issues=open_issues,
@@ -323,4 +408,8 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
         triage=triage,
         sync=sync,
         events=events,
+        open_trend=open_trend,
+        closed_week=closed_week,
+        median_age_days=median_age_days,
+        stale_count=stale_count,
     )
