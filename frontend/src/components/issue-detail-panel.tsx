@@ -131,6 +131,7 @@ export function IssueDetailPanel({
   const { data, error, isPending, refetch } = useQuery({
     queryKey: ["issue-detail", issueId],
     queryFn: () => getJson<IssueDetail>(`/api/backend/issues/${issueId}`),
+    retry: false,
   });
 
   const missing = data?.readiness?.factors.filter((f) => !f.present) ?? [];

@@ -166,6 +166,8 @@ test("queue row click selects; bubble hover shows explainability with AI tag", a
   await stubMatrix(page);
   await page.goto("/plan/matrix");
   await page.getByTestId("qrow-43").click();
+  await expect(page.getByTestId("issue-detail-panel")).toBeVisible();
+  await page.getByTestId("detail-back").click();
   await expect(page.getByTestId("qrow-43")).toHaveClass(/bg-\(--accent-tint\)/);
 
   await page.getByTestId("bubble-42").hover();

@@ -16,12 +16,12 @@ const GROUP_ORDER: Quadrant[] = ["dofirst", "schedule", "delegate", "reconsider"
 export function ExecutionQueue({
   plotted,
   selectedId,
-  onSelect,
+  onOpen,
   onRelease,
 }: {
   plotted: PlottedItem[];
   selectedId: number | null;
-  onSelect: (id: number | null) => void;
+  onOpen: (id: number) => void;
   onRelease: (issueId: number) => void;
 }) {
   // rank signature per issue: "<quadrant>:<index>" — change triggers the flash
@@ -84,9 +84,7 @@ export function ExecutionQueue({
                     type="button"
                     data-qrow-id={item.issue_id}
                     data-testid={`qrow-${item.number}`}
-                    onClick={() =>
-                      onSelect(selectedId === item.issue_id ? null : item.issue_id)
-                    }
+                    onClick={() => onOpen(item.issue_id)}
                     className={`flex min-w-0 grow items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-150 ${
                       flashIds.current.has(item.issue_id) ? "qrow-flash" : ""
                     } ${
