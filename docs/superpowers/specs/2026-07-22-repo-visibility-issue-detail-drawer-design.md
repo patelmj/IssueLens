@@ -75,11 +75,11 @@ selects and aggregates; it does not firewall the data.
 
 ### Edge case: stale `repo_id` in the URL
 
-If a URL carries the `repo_id` of a now-hidden repo, the repo is absent from the
-filtered `["repositories"]` list, so views take their existing "unknown repo"
-paths: the matrix falls back to `repos[0]` (its current default), and the plan
-table/board fall back to "All repositories". No special-case code — just verify
-with a test.
+Consistent with "hide, don't firewall": a URL that still carries the `repo_id`
+of a now-hidden repo keeps working — explicit single-repo requests are never
+blocked, so the view renders that repo's data. The repo is simply absent from
+the select's options (a deep link is an explicit ask; the flag only governs
+selects and unscoped aggregates). No fallback logic.
 
 ---
 
