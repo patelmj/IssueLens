@@ -71,7 +71,8 @@ selects and aggregates; it does not firewall the data.
   `["repositories", "all"]` and `["repositories"]` plus `["stats"]`, so the sidenav,
   toolbars, and overview refresh immediately. Mutation errors surface inline on the
   card (no silent failure).
-- `Repo` type in `frontend/src/lib` gains `visible`.
+- The management page's local `Repo` type gains `visible` (consumers elsewhere keep
+  their minimal local `{id, full_name}` types).
 
 ### Edge case: stale `repo_id` in the URL
 

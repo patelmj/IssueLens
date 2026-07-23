@@ -8,8 +8,9 @@ import {
 } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getJson, sendJson } from "../../../lib/api";
+import { IssueDetailPanel } from "../../../components/issue-detail-panel";
 import { RightRail } from "../../../components/right-rail";
 import { PlanTabs } from "../plan-tabs";
 import { ExecutionQueue } from "./execution-queue";
@@ -129,8 +130,23 @@ export function MatrixClient() {
   });
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detailIssueId, setDetailIssueId] = useState<number | null>(null);
   const [hover, setHover] = useState<{ item: PlottedItem; cx: number; cy: number } | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+
+  const openDetail = useCallback((issueId: number) => {
+    setSelectedId(issueId);
+    setDetailIssueId(issueId);
+  }, [setSelectedId, setDetailIssueId]);
+
+  useEffect(() => {
+    if (detailIssueId == null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetailIssueId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detailIssueId]);
 
   const patchItem = useCallback(
     (issueId: number, patch: Partial<MatrixItem>) => {
@@ -239,9 +255,10 @@ export function MatrixClient() {
           aria-label="Repository"
           className="rounded-lg border border-(--color-border) bg-(--color-surface) px-2.5 py-1.5"
           value={repoId ?? ""}
-          onChange={(e) =>
-            navigateWith(e.target.value ? Number(e.target.value) : null, filters)
-          }
+          onChange={(e) => {
+            setDetailIssueId(null);
+            navigateWith(e.target.value ? Number(e.target.value) : null, filters);
+          }}
         >
           {(repos ?? []).map((repo) => (
             <option key={repo.id} value={repo.id}>
@@ -338,7 +355,10 @@ export function MatrixClient() {
               key={repoId ?? "none"}
               plotted={plotted}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setDetailIssueId(id);
+              }}
               onPin={(issueId, urgency, importance) => {
                 setHover(null);
                 setSelectedId(issueId);
@@ -349,12 +369,23 @@ export function MatrixClient() {
             {hover ? <MatrixHoverCard item={hover.item} cx={hover.cx} cy={hover.cy} /> : null}
           </div>
           <RightRail>
-            <ExecutionQueue
-              plotted={plotted}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onRelease={(issueId) => releaseMutation.mutate(issueId)}
-            />
+            {detailIssueId != null ? (
+              <div className="rail-slide-in">
+                <IssueDetailPanel
+                  issueId={detailIssueId}
+                  onBack={() => setDetailIssueId(null)}
+                />
+              </div>
+            ) : (
+              <div className="rail-slide-back">
+                <ExecutionQueue
+                  plotted={plotted}
+                  selectedId={selectedId}
+                  onOpen={openDetail}
+                  onRelease={(issueId) => releaseMutation.mutate(issueId)}
+                />
+              </div>
+            )}
           </RightRail>
           {selected?.pinned ? (
             <div

@@ -69,6 +69,31 @@ async function stubMatrix(page: Page, calls?: { pins: unknown[]; releases: numbe
     );
     return route.fulfill({ json: { ...payload, items } });
   });
+  await page.route(/\/api\/backend\/issues\/\d+$/, (route: Route) =>
+    route.fulfill({
+      json: {
+        id: 2,
+        repository_id: 500,
+        repo_full_name: "patelmj/mehova",
+        html_url: "https://github.com/patelmj/mehova/issues/43",
+        number: 43,
+        title: "Docs typo",
+        body: null,
+        state: "open",
+        author_login: "sam",
+        labels: [],
+        assignees: [],
+        milestone_title: null,
+        comments_count: 0,
+        gh_created_at: "2026-07-20T00:00:00Z",
+        gh_updated_at: "2026-07-21T00:00:00Z",
+        gh_closed_at: null,
+        classification: null,
+        priority: null,
+        readiness: null,
+      },
+    }),
+  );
   await page.route(/\/api\/backend\/issues\/\d+\/pin$/, (route: Route) => {
     if (route.request().method() === "PUT") {
       const body = route.request().postDataJSON() as { urgency: number; importance: number };
@@ -166,6 +191,8 @@ test("queue row click selects; bubble hover shows explainability with AI tag", a
   await stubMatrix(page);
   await page.goto("/plan/matrix");
   await page.getByTestId("qrow-43").click();
+  await expect(page.getByTestId("issue-detail-panel")).toBeVisible();
+  await page.getByTestId("detail-back").click();
   await expect(page.getByTestId("qrow-43")).toHaveClass(/bg-\(--accent-tint\)/);
 
   await page.getByTestId("bubble-42").hover();

@@ -51,6 +51,9 @@ class Repository(Base):
     sync_status: Mapped[str] = mapped_column(Text, default="idle", server_default="idle")
     sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     open_issues_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    visible: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
 
 
 class Issue(Base):

@@ -7,7 +7,7 @@ test("repositories page renders its content region", async ({ page }) => {
 });
 
 test("repositories empty state shows Connect GitHub guidance", async ({ page }) => {
-  await page.route(/\/api\/backend\/repositories$/, (route) =>
+  await page.route(/\/api\/backend\/repositories(\?.*)?$/, (route) =>
     route.fulfill({ json: [] }),
   );
   await page.goto("/repositories");

@@ -14,12 +14,18 @@ def api():
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def seed_repo():
+async def seed_repo(
+    repo_id: int = 500,
+    full_name: str = "patelmj/IssueLens",
+    visible: bool = True,
+) -> None:
     async with get_sessionmaker()() as session:
-        session.add(Installation(id=42, account_login="patelmj"))
-        session.add(
-            Repository(id=500, installation_id=42, full_name="patelmj/IssueLens",
-                       owner="patelmj", name="IssueLens")
+        await session.merge(Installation(id=42, account_login="patelmj"))
+        await session.merge(
+            Repository(
+                id=repo_id, installation_id=42, full_name=full_name,
+                owner="patelmj", name=full_name.split("/")[1], visible=visible,
+            )
         )
         await session.commit()
 
@@ -110,3 +116,45 @@ async def test_sync_unconfigured_returns_503(clean_db, api):
         resp = await client.post("/repositories/1/sync")
     assert resp.status_code == 503
     assert "GitHub App not configured" in resp.json()["detail"]
+
+
+async def test_list_excludes_hidden_by_default(clean_db, api):
+    await seed_repo()
+    await seed_repo(repo_id=501, full_name="patelmj/hidden-repo", visible=False)
+    async with api as client:
+        resp = await client.get("/repositories")
+    body = resp.json()
+    assert [r["full_name"] for r in body] == ["patelmj/IssueLens"]
+    assert body[0]["visible"] is True
+
+
+async def test_list_include_hidden_returns_all(clean_db, api):
+    await seed_repo()
+    await seed_repo(repo_id=501, full_name="patelmj/hidden-repo", visible=False)
+    async with api as client:
+        resp = await client.get("/repositories?include_hidden=true")
+    body = resp.json()
+    # Sort order follows the DB's collation (case-insensitive-ish locale sort
+    # puts "hidden-repo" before "IssueLens"), not ASCII/byte order.
+    assert [(r["full_name"], r["visible"]) for r in body] == [
+        ("patelmj/hidden-repo", False),
+        ("patelmj/IssueLens", True),
+    ]
+
+
+async def test_patch_visibility_toggles(clean_db, api):
+    await seed_repo()
+    async with api as client:
+        resp = await client.patch("/repositories/500", json={"visible": False})
+        assert resp.status_code == 200
+        assert resp.json()["visible"] is False
+        listed = await client.get("/repositories")
+        assert listed.json() == []
+        back = await client.patch("/repositories/500", json={"visible": True})
+        assert back.json()["visible"] is True
+
+
+async def test_patch_visibility_unknown_repo_404(clean_db, api):
+    async with api as client:
+        resp = await client.patch("/repositories/99999", json={"visible": False})
+    assert resp.status_code == 404

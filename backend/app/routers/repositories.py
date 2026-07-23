@@ -24,6 +24,7 @@ class RepositoryOut(BaseModel):
     last_synced_at: datetime | None
     sync_status: str
     sync_error: str | None
+    visible: bool
 
     model_config = {"from_attributes": True}
 
@@ -37,16 +38,22 @@ def _require_app_config() -> None:
         )
 
 
-async def _list_repos(session: AsyncSession) -> list[Repository]:
-    result = await session.execute(select(Repository).order_by(Repository.full_name))
+async def _list_repos(
+    session: AsyncSession, include_hidden: bool = False
+) -> list[Repository]:
+    query = select(Repository).order_by(Repository.full_name)
+    if not include_hidden:
+        query = query.where(Repository.visible.is_(True))
+    result = await session.execute(query)
     return list(result.scalars())
 
 
 @router.get("", response_model=list[RepositoryOut])
 async def list_repositories(
+    include_hidden: bool = False,
     session: AsyncSession = Depends(get_session),
 ) -> list[Repository]:
-    return await _list_repos(session)
+    return await _list_repos(session, include_hidden=include_hidden)
 
 
 @router.post("/refresh", response_model=list[RepositoryOut])
@@ -59,7 +66,28 @@ async def refresh_repositories(
             await refresh_installations(session, client)
     except GitHubAppNotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return await _list_repos(session)
+    return await _list_repos(session, include_hidden=True)
+
+
+class RepositoryVisibilityPatch(BaseModel):
+    visible: bool
+
+
+@router.patch("/{repo_id}", response_model=RepositoryOut)
+async def update_repository(
+    repo_id: int,
+    patch: RepositoryVisibilityPatch,
+    session: AsyncSession = Depends(get_session),
+) -> Repository:
+    repo = (
+        await session.execute(select(Repository).where(Repository.id == repo_id))
+    ).scalar_one_or_none()
+    if repo is None:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    repo.visible = patch.visible
+    await session.commit()
+    await session.refresh(repo)
+    return repo
 
 
 @router.post("/{repo_id}/sync", status_code=202)
