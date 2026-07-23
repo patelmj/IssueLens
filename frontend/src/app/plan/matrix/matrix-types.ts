@@ -53,11 +53,15 @@ export function quadrantOf(item: PlottedItem): Quadrant {
   return item.i >= 50 ? "schedule" : "reconsider";
 }
 
-export function seriesOf(item: MatrixItem): Series {
-  if (item.issue_type === "bug" || item.issue_type === "feature" || item.issue_type === "debt") {
-    return item.issue_type;
+export function seriesOfType(issueType: string | null): Series {
+  if (issueType === "bug" || issueType === "feature" || issueType === "debt") {
+    return issueType;
   }
   return "other";
+}
+
+export function seriesOf(item: MatrixItem): Series {
+  return seriesOfType(item.issue_type);
 }
 
 export const SERIES_VAR: Record<Series, string> = {

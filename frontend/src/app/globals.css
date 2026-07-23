@@ -143,3 +143,18 @@ body {
     animation: none;
   }
 }
+.overview-rise {
+  animation: overview-rise 0.4s ease both;
+  animation-delay: var(--rise-delay, 0ms);
+}
+@keyframes overview-rise {
+  0% {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overview-rise {
+    animation: none;
+  }
+}
