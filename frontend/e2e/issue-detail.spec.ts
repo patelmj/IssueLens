@@ -74,6 +74,27 @@ async function stubRoutes(page: Page) {
   );
 }
 
+/** Two repos: 500 has the scored matrix + detail issue, 501 has no scored items. */
+async function stubTwoRepoRoutes(page: Page) {
+  await page.route(/\/api\/backend\/repositories$/, (route: Route) =>
+    route.fulfill({
+      json: [
+        { id: 500, full_name: "patelmj/mehova" },
+        { id: 501, full_name: "patelmj/other" },
+      ],
+    }),
+  );
+  await page.route(/\/api\/backend\/repositories\/500\/priority$/, (route: Route) =>
+    route.fulfill({ json: matrixPayload }),
+  );
+  await page.route(/\/api\/backend\/repositories\/501\/priority$/, (route: Route) =>
+    route.fulfill({ json: { items: [], total: 0, scored: 0, unscored: 0 } }),
+  );
+  await page.route(/\/api\/backend\/issues\/1$/, (route: Route) =>
+    route.fulfill({ json: detail }),
+  );
+}
+
 test("queue row click opens the detail drawer; back restores the queue", async ({ page }) => {
   await stubRoutes(page);
   await page.goto("/plan/matrix");
@@ -104,6 +125,28 @@ test("Escape closes the drawer and restores the queue", async ({ page }) => {
   await expect(page.getByTestId("issue-detail-panel")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("execution-queue")).toBeVisible();
+  await expect(page.getByTestId("qrow-42")).toHaveClass(/accent-tint/);
+});
+
+test("clicking a matrix bubble opens the detail drawer", async ({ page }) => {
+  await stubRoutes(page);
+  await page.goto("/plan/matrix");
+  const bubble = page.getByTestId("bubble-42");
+  await expect(bubble).toBeVisible();
+  await bubble.click();
+
+  await expect(page.getByTestId("issue-detail-panel")).toBeVisible();
+});
+
+test("switching repositories closes an open drawer", async ({ page }) => {
+  await stubTwoRepoRoutes(page);
+  await page.goto("/plan/matrix");
+  await page.getByTestId("qrow-42").click();
+  await expect(page.getByTestId("issue-detail-panel")).toBeVisible();
+
+  await page.getByLabel("Repository").selectOption("501");
+
+  await expect(page.getByTestId("issue-detail-panel")).toHaveCount(0);
 });
 
 test("detail endpoint failure shows an error with retry", async ({ page }) => {
