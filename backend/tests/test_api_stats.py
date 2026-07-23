@@ -307,7 +307,7 @@ async def seed_sync_jobs(*jobs: SyncJob) -> None:
 async def test_sync_health_states(api, clean_db):
     await seed_overview_data()
     await seed_sync_jobs(
-        SyncJob(repository_id=500, kind="sync", status="success",
+        SyncJob(repository_id=500, kind="full", status="success",
                 started_at=NOW - timedelta(minutes=10), finished_at=NOW - timedelta(minutes=9)),
     )
     async with api as client:
@@ -316,7 +316,7 @@ async def test_sync_health_states(api, clean_db):
     assert body["sync"]["visible_repos"] == 2
 
     await seed_sync_jobs(
-        SyncJob(repository_id=500, kind="sync", status="error", error="boom",
+        SyncJob(repository_id=500, kind="incremental", status="error", error="boom",
                 started_at=NOW - timedelta(minutes=5), finished_at=NOW - timedelta(minutes=4)),
     )
     # api is a single AsyncClient instance already closed by the previous `async
@@ -326,7 +326,7 @@ async def test_sync_health_states(api, clean_db):
     assert body["sync"]["status"] == "error"
 
     await seed_sync_jobs(
-        SyncJob(repository_id=500, kind="sync", status="running",
+        SyncJob(repository_id=500, kind="full", status="running",
                 started_at=NOW - timedelta(minutes=1)),
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -334,10 +334,30 @@ async def test_sync_health_states(api, clean_db):
     assert body["sync"]["status"] == "syncing"
 
 
+async def test_sync_health_ignores_llm_pipeline_jobs(api, clean_db):
+    """LLM pipeline jobs (classify/priority/readiness) must not affect sync health —
+    only GitHub sync kinds ("full"/"incremental") count. A newer, failed "readiness"
+    job must not turn a healthy GitHub sync status into "error"."""
+    await seed_overview_data()
+    await seed_sync_jobs(
+        SyncJob(repository_id=500, kind="full", status="success",
+                started_at=NOW - timedelta(minutes=10), finished_at=NOW - timedelta(minutes=9)),
+    )
+    await seed_sync_jobs(
+        SyncJob(repository_id=500, kind="readiness", status="error", error="boom",
+                started_at=NOW - timedelta(minutes=1), finished_at=NOW),
+    )
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    assert body["sync"]["status"] == "healthy"
+    synced_texts = [e["text"] for e in body["events"] if e["kind"] == "synced"]
+    assert synced_texts == ["Synced patelmj/mehova"]
+
+
 async def test_events_interleaved_desc_capped_at_8(api, clean_db):
     await seed_overview_data()
     await seed_sync_jobs(
-        SyncJob(repository_id=500, kind="sync", status="success",
+        SyncJob(repository_id=500, kind="full", status="success",
                 started_at=NOW - timedelta(minutes=3), finished_at=NOW - timedelta(minutes=2)),
     )
     async with api as client:
@@ -351,6 +371,32 @@ async def test_events_interleaved_desc_capped_at_8(api, clean_db):
     assert "closed" in kinds
     ats = [e["at"] for e in events]
     assert ats == sorted(ats, reverse=True)
+
+
+async def test_events_truncated_to_8_newest(api, clean_db):
+    await seed_overview_data()
+    async with get_sessionmaker()() as session:
+        session.add_all(
+            [
+                Issue(
+                    id=9200 + idx, repository_id=500, number=300 + idx,
+                    title=f"bulk issue {idx}", state="open",
+                    gh_created_at=NOW - timedelta(hours=idx),
+                    gh_updated_at=NOW,
+                )
+                for idx in range(12)
+            ]
+        )
+        await session.commit()
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    events = body["events"]
+    assert len(events) == 8
+    ats = [e["at"] for e in events]
+    assert ats == sorted(ats, reverse=True)
+    # the 8 newest should be the 8 most-recently-opened bulk issues (idx 0..7)
+    expected_titles = {f"#{300 + idx} bulk issue {idx}" for idx in range(8)}
+    assert {e["text"] for e in events if e["kind"] == "opened"} == expected_titles
 
 
 def test_open_trend_walks_activity_net_backwards():

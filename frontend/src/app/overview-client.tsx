@@ -113,8 +113,8 @@ export function OverviewClient() {
         </div>
       ) : (
         <>
-          <div className="overview-rise grid grid-cols-3 gap-4">
-            <div className="col-span-2">
+          <div className="overview-rise grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
               <DoFirstSpotlight items={data.do_first} onOpen={setDetailIssueId} />
             </div>
             <div className="flex flex-col gap-4" data-testid="overview-side-stack">
@@ -157,10 +157,10 @@ export function OverviewClient() {
             />
           </div>
           <div
-            className="overview-rise grid grid-cols-3 gap-4"
+            className="overview-rise grid grid-cols-1 gap-4 lg:grid-cols-3"
             style={{ "--rise-delay": "120ms" } as React.CSSProperties}
           >
-            <div className={`${card} col-span-2 px-4 py-3`}>
+            <div className={`${card} lg:col-span-2 px-4 py-3`}>
               <div className="flex items-baseline justify-between pb-1">
                 <span className="text-sm font-medium">Opened vs closed</span>
                 <span className="text-(--color-text-muted)">last 30 days</span>

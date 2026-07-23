@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -27,6 +27,7 @@ TRIAGE_TEASER_THRESHOLD = 80
 TRIAGE_TEASER_BARS = 3
 EVENTS_LIMIT = 8
 STALE_DAYS = 30
+SYNC_JOB_KINDS = ("full", "incremental")
 
 
 class TopRepo(BaseModel):
@@ -109,8 +110,9 @@ async def _matrix_snapshot(
     rows = (
         await session.execute(
             select(
-                Issue, IssuePriority, IssuePriorityPin, IssueClassification,
-                IssueReadiness, Repository.name,
+                Issue.id, Issue.number, Issue.title, Issue.labels, Issue.gh_created_at,
+                IssuePriority, IssuePriorityPin, IssueClassification, IssueReadiness,
+                Repository.name,
             )
             .join(Repository, Issue.repository_id == Repository.id)
             .outerjoin(IssuePriority, IssuePriority.issue_id == Issue.id)
@@ -121,12 +123,19 @@ async def _matrix_snapshot(
                 Issue.state == "open",
                 Issue.is_pull_request.is_(False),
                 Repository.visible.is_(True),
+                or_(
+                    IssuePriority.issue_id.is_not(None),
+                    IssuePriorityPin.issue_id.is_not(None),
+                ),
             )
         )
     ).all()
     minimap: list[MinimapPoint] = []
     candidates: list[DoFirstItem] = []
-    for issue, priority, pin, classification, readiness, repo_name in rows:
+    for (
+        issue_id_val, issue_number, issue_title, issue_labels, issue_created_at,
+        priority, pin, classification, readiness, repo_name,
+    ) in rows:
         if pin is not None:
             u, i = pin.pinned_urgency, pin.pinned_importance
         elif priority is not None:
@@ -134,20 +143,20 @@ async def _matrix_snapshot(
         else:
             continue
         issue_type = classification.issue_type if classification else None
-        estimate = estimate_from(issue.labels or [], readiness.score if readiness else None)
+        estimate = estimate_from(issue_labels or [], readiness.score if readiness else None)
         minimap.append(MinimapPoint(u=u, i=i, type=issue_type, estimate=estimate))
         if u >= 50 and i >= 50:
             candidates.append(
                 DoFirstItem(
-                    issue_id=issue.id,
-                    number=issue.number,
-                    title=issue.title,
+                    issue_id=issue_id_val,
+                    number=issue_number,
+                    title=issue_title,
                     repo_short=repo_name,
                     issue_type=issue_type,
                     estimate=estimate,
                     readiness=readiness.score if readiness else None,
                     score=u + i,
-                    opened_at=issue.gh_created_at,
+                    opened_at=issue_created_at,
                 )
             )
     candidates.sort(key=lambda item: (-item.score, item.issue_id))
@@ -173,7 +182,11 @@ async def _sync_health(
             select(func.count())
             .select_from(SyncJob)
             .join(Repository, SyncJob.repository_id == Repository.id)
-            .where(Repository.visible.is_(True), SyncJob.status == "running")
+            .where(
+                Repository.visible.is_(True),
+                SyncJob.status == "running",
+                SyncJob.kind.in_(SYNC_JOB_KINDS),
+            )
         )
     ).scalar_one()
     if running:
@@ -183,7 +196,7 @@ async def _sync_health(
             await session.execute(
                 select(SyncJob.status)
                 .join(Repository, SyncJob.repository_id == Repository.id)
-                .where(Repository.visible.is_(True))
+                .where(Repository.visible.is_(True), SyncJob.kind.in_(SYNC_JOB_KINDS))
                 .order_by(SyncJob.started_at.desc())
                 .limit(1)
             )
@@ -225,6 +238,7 @@ async def _recent_events(session: AsyncSession) -> list[ActivityEvent]:
                 SyncJob.status == "success",
                 SyncJob.finished_at.is_not(None),
                 Repository.visible.is_(True),
+                SyncJob.kind.in_(SYNC_JOB_KINDS),
             )
             .order_by(SyncJob.finished_at.desc())
             .limit(EVENTS_LIMIT)

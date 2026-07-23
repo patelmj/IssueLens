@@ -17,6 +17,7 @@ test("health band renders four trend tiles", async ({ page }) => {
   // old tiles are gone
   await expect(page.getByText("Connected repos")).toHaveCount(0);
   await expect(page.getByText("Biggest repo")).toHaveCount(0);
+  await expect(page.getByText("Opened vs closed")).toBeVisible();
 });
 
 test("empty state still shows connect CTA", async ({ page }) => {
