@@ -5,7 +5,15 @@ from httpx import ASGITransport, AsyncClient
 
 from app.db import get_sessionmaker
 from app.main import app
-from app.models import Installation, Issue, Repository
+from app.models import (
+    Installation,
+    Issue,
+    IssueClassification,
+    IssuePriority,
+    IssuePriorityPin,
+    IssueReadiness,
+    Repository,
+)
 
 NOW = datetime.now(timezone.utc)
 
@@ -72,6 +80,8 @@ async def test_overview_stats_empty_db(clean_db, api):
         "last_synced_at": None,
         "top_repos": [],
         "activity": [],
+        "do_first": [],
+        "minimap": [],
     }
 
 
@@ -142,3 +152,127 @@ async def test_overview_stats_exclude_hidden_repos(clean_db, api):
     assert [r["full_name"] for r in body["top_repos"]] == ["patelmj/IssueLens"]
     assert body["activity"] == []  # opened issue 1 and closed issue 3 are in repo 500
     assert body["last_synced_at"] is not None  # repo 501 still visible
+
+
+async def seed_priority_data() -> None:
+    """Adds prioritized issues on top of seed_overview_data's repos (500 visible, 501 visible)."""
+    await seed_overview_data()
+    async with get_sessionmaker()() as session:
+        session.add_all(
+            [
+                Issue(
+                    id=9001, repository_id=500, number=101, title="Auth token crash",
+                    state="open", gh_created_at=NOW - timedelta(days=3),
+                    gh_updated_at=NOW - timedelta(days=1), labels=[{"name": "size/l", "color": "aaa"}],
+                ),
+                Issue(
+                    id=9002, repository_id=500, number=102, title="Delegate item",
+                    state="open", gh_created_at=NOW - timedelta(days=5),
+                    gh_updated_at=NOW - timedelta(days=2),
+                ),
+                Issue(
+                    id=9003, repository_id=500, number=103, title="Pinned rescue",
+                    state="open", gh_created_at=NOW - timedelta(days=8),
+                    gh_updated_at=NOW - timedelta(days=4),
+                ),
+                Issue(
+                    id=9004, repository_id=501, number=104, title="Second repo urgent",
+                    state="open", gh_created_at=NOW - timedelta(days=2),
+                    gh_updated_at=NOW - timedelta(days=1),
+                ),
+                Issue(
+                    id=9005, repository_id=500, number=105, title="Closed but urgent",
+                    state="closed", gh_created_at=NOW - timedelta(days=9),
+                    gh_updated_at=NOW - timedelta(days=1), gh_closed_at=NOW - timedelta(days=1),
+                ),
+                Issue(
+                    id=9006, repository_id=500, number=106, title="Boundary case",
+                    state="open", gh_created_at=NOW - timedelta(days=6),
+                    gh_updated_at=NOW - timedelta(days=3),
+                ),
+                Issue(
+                    id=9007, repository_id=500, number=107, title="Fifth wheel",
+                    state="open", gh_created_at=NOW - timedelta(days=7),
+                    gh_updated_at=NOW - timedelta(days=3),
+                ),
+                Issue(
+                    id=9008, repository_id=500, number=108, title="Urgent PR",
+                    state="open", is_pull_request=True,
+                    gh_created_at=NOW - timedelta(days=1),
+                    gh_updated_at=NOW - timedelta(days=1),
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                IssuePriority(issue_id=9001, urgency=80, importance=70, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriority(issue_id=9002, urgency=90, importance=40, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriority(issue_id=9003, urgency=30, importance=30, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriority(issue_id=9004, urgency=55, importance=90, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriority(issue_id=9005, urgency=99, importance=99, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriority(issue_id=9006, urgency=50, importance=52, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriority(issue_id=9007, urgency=50, importance=50, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriority(issue_id=9008, urgency=95, importance=95, model="m",
+                              issue_gh_updated_at=NOW),
+                IssuePriorityPin(issue_id=9003, pinned_urgency=60.5, pinned_importance=72.5),
+                IssueClassification(issue_id=9001, issue_type="bug", confidence=0.9, model="m",
+                                    issue_gh_updated_at=NOW),
+                IssueReadiness(issue_id=9001, issue_type="bug", score=55, model="m",
+                               issue_gh_updated_at=NOW, classification_scored_at=NOW),
+            ]
+        )
+        await session.commit()
+
+
+async def test_do_first_top4_score_ordered_pin_aware(api, clean_db):
+    await seed_priority_data()
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    got = [(d["issue_id"], d["score"]) for d in body["do_first"]]
+    # 9001: 80+70=150; 9004: 55+90=145; 9003 pinned: 60.5+72.5=133.0;
+    # 9006: 50+52=102; 9007 (50+50=100) cut by the top-4 cap; 9002 delegate;
+    # 9005 closed; 9008 is a PR (excluded despite 95/95).
+    assert got == [(9001, 150.0), (9004, 145.0), (9003, 133.0), (9006, 102.0)]
+    first = body["do_first"][0]
+    assert first["number"] == 101
+    assert first["title"] == "Auth token crash"
+    assert first["repo_short"] == "mehova"
+    assert first["issue_type"] == "bug"
+    assert first["estimate"] == 4  # size/l label
+    assert first["readiness"] == 55
+    pinned = body["do_first"][2]
+    assert pinned["issue_type"] is None
+    assert pinned["readiness"] is None
+    assert pinned["estimate"] == 3  # no labels, no readiness -> default
+
+
+async def test_minimap_lists_all_prioritized_open_issues(api, clean_db):
+    await seed_priority_data()
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    points = {(p["u"], p["i"]) for p in body["minimap"]}
+    # 9005 (closed) and 9008 (PR) excluded; unprioritized seed_overview_data
+    # issues excluded; 9003 appears at its PIN coordinates.
+    assert points == {
+        (80.0, 70.0), (90.0, 40.0), (60.5, 72.5), (55.0, 90.0), (50.0, 52.0), (50.0, 50.0)
+    }
+    by_coord = {(p["u"], p["i"]): p for p in body["minimap"]}
+    assert by_coord[(80.0, 70.0)]["type"] == "bug"
+    assert by_coord[(80.0, 70.0)]["estimate"] == 4
+
+
+async def test_do_first_excludes_hidden_repos(api, clean_db):
+    await seed_priority_data()
+    await hide_repo(501)
+    async with api as client:
+        body = (await client.get("/stats/overview")).json()
+    ids = [d["issue_id"] for d in body["do_first"]]
+    assert 9004 not in ids
+    assert ids == [9001, 9003, 9006, 9007]

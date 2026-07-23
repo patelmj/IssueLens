@@ -6,12 +6,21 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.models import Issue, Repository
+from app.llm.priority import estimate_from
+from app.models import (
+    Issue,
+    IssueClassification,
+    IssuePriority,
+    IssuePriorityPin,
+    IssueReadiness,
+    Repository,
+)
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 ACTIVITY_DAYS = 30
 TOP_REPOS_LIMIT = 5
+DO_FIRST_LIMIT = 4
 
 
 class TopRepo(BaseModel):
@@ -26,12 +35,84 @@ class ActivityDay(BaseModel):
     closed: int
 
 
+class DoFirstItem(BaseModel):
+    issue_id: int
+    number: int
+    title: str
+    repo_short: str
+    issue_type: str | None
+    estimate: int
+    readiness: int | None
+    score: float
+    opened_at: datetime
+
+
+class MinimapPoint(BaseModel):
+    u: float
+    i: float
+    type: str | None
+    estimate: int
+
+
 class OverviewStats(BaseModel):
     connected_repos: int
     open_issues: int
     last_synced_at: datetime | None
     top_repos: list[TopRepo]
     activity: list[ActivityDay]
+    do_first: list[DoFirstItem]
+    minimap: list[MinimapPoint]
+
+
+async def _matrix_snapshot(
+    session: AsyncSession,
+) -> tuple[list[DoFirstItem], list[MinimapPoint]]:
+    rows = (
+        await session.execute(
+            select(
+                Issue, IssuePriority, IssuePriorityPin, IssueClassification,
+                IssueReadiness, Repository.name,
+            )
+            .join(Repository, Issue.repository_id == Repository.id)
+            .outerjoin(IssuePriority, IssuePriority.issue_id == Issue.id)
+            .outerjoin(IssuePriorityPin, IssuePriorityPin.issue_id == Issue.id)
+            .outerjoin(IssueClassification, IssueClassification.issue_id == Issue.id)
+            .outerjoin(IssueReadiness, IssueReadiness.issue_id == Issue.id)
+            .where(
+                Issue.state == "open",
+                Issue.is_pull_request.is_(False),
+                Repository.visible.is_(True),
+            )
+        )
+    ).all()
+    minimap: list[MinimapPoint] = []
+    candidates: list[DoFirstItem] = []
+    for issue, priority, pin, classification, readiness, repo_name in rows:
+        if pin is not None:
+            u, i = pin.pinned_urgency, pin.pinned_importance
+        elif priority is not None:
+            u, i = float(priority.urgency), float(priority.importance)
+        else:
+            continue
+        issue_type = classification.issue_type if classification else None
+        estimate = estimate_from(issue.labels or [], readiness.score if readiness else None)
+        minimap.append(MinimapPoint(u=u, i=i, type=issue_type, estimate=estimate))
+        if u >= 50 and i >= 50:
+            candidates.append(
+                DoFirstItem(
+                    issue_id=issue.id,
+                    number=issue.number,
+                    title=issue.title,
+                    repo_short=repo_name,
+                    issue_type=issue_type,
+                    estimate=estimate,
+                    readiness=readiness.score if readiness else None,
+                    score=u + i,
+                    opened_at=issue.gh_created_at,
+                )
+            )
+    candidates.sort(key=lambda item: (-item.score, item.issue_id))
+    return candidates[:DO_FIRST_LIMIT], minimap
 
 
 @router.get("/overview", response_model=OverviewStats)
@@ -110,6 +191,7 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
         ActivityDay(date=day, opened=opened, closed=closed)
         for day, (opened, closed) in sorted(counts.items())
     ]
+    do_first, minimap = await _matrix_snapshot(session)
     return OverviewStats(
         connected_repos=connected_repos,
         open_issues=open_issues,
@@ -119,4 +201,6 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
             for row in top_rows
         ],
         activity=activity,
+        do_first=do_first,
+        minimap=minimap,
     )
