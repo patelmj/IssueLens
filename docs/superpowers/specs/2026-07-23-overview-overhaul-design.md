@@ -79,7 +79,7 @@ All cards keep the standard treatment: 14px radius, `--color-surface`,
 
 Open-issue trajectory is derived server-side: current count walked backwards
 through the daily opened/closed net — no schema change. Delta arrows use
-`--type-bug` red for worsening, `--chart-closed` green for improving.
+`--color-danger` red for worsening, `--chart-closed` green for improving.
 
 ### Depth row
 
@@ -94,7 +94,7 @@ the frontend keeps its single `overview-stats` query with 30s refetch. New respo
 fields alongside the existing ones:
 
 ```
-do_first:        [{issue_id, number, title, repo_short, type, effort, readiness, score}]  # top 4
+do_first:        [{issue_id, number, title, repo_short, issue_type, estimate, readiness, score}]  # top 4
 triage:          {count, top: [{readiness}]}                                              # top 3 bars
 sync:            {status: "healthy"|"syncing"|"error", last_synced_at, visible_repos}
 open_trend:      [int]        # 30 daily points, derived from current count + activity net
