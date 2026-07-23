@@ -303,3 +303,48 @@ async def test_readiness_breakdown_404_when_absent(clean_db, api):
 async def test_bad_max_readiness_is_422(clean_db, api):
     async with api as client:
         assert (await client.get("/issues?max_readiness=200")).status_code == 422
+
+
+async def hide_repo(repo_id: int) -> None:
+    async with get_sessionmaker()() as session:
+        repo = await session.get(Repository, repo_id)
+        repo.visible = False
+        await session.commit()
+
+
+async def test_unscoped_list_excludes_hidden_repos(clean_db, api):
+    await seed_issues()
+    await hide_repo(501)
+    body = await get_body(api, "/issues")
+    assert [i["title"] for i in body["items"]] == ["Alpha bug"]
+    assert body["total"] == 1
+
+
+async def test_explicit_repo_id_still_reaches_hidden_repo(clean_db, api):
+    await seed_issues()
+    await hide_repo(501)
+    body = await get_body(api, "/issues?repo_id=501")
+    assert [i["title"] for i in body["items"]] == ["Delta task"]
+
+
+async def test_facets_exclude_hidden_repos(clean_db, api):
+    await seed_issues()
+    await hide_repo(500)
+    body = await get_body(api, "/issues/facets")
+    assert [lb["name"] for lb in body["labels"]] == ["bug"]
+    assert body["assignees"] == ["octocat"]
+
+
+async def test_facets_explicit_repo_id_ignores_visibility(clean_db, api):
+    await seed_issues()
+    await hide_repo(500)
+    body = await get_body(api, "/issues/facets?repo_id=500")
+    assert [lb["name"] for lb in body["labels"]] == ["bug", "feature"]
+
+
+async def test_facets_components_exclude_hidden_repos(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await hide_repo(500)
+    body = await get_body(api, "/issues/facets")
+    assert body["components"] == ["sync"]

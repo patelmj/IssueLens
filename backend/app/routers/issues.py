@@ -80,6 +80,8 @@ def _filtered_query(
     )
     if repo_id is not None:
         query = query.where(Issue.repository_id == repo_id)
+    else:
+        query = query.where(Repository.visible.is_(True))
     if state != "all":
         query = query.where(Issue.state == state)
     if label:
@@ -159,13 +161,21 @@ async def issue_facets(
     repo_id: int | None = None,
 ) -> FacetsOut:
     repo_clause = "AND repository_id = :repo_id" if repo_id is not None else ""
+    visible_clause = (
+        ""
+        if repo_id is not None
+        else (
+            "AND EXISTS (SELECT 1 FROM repositories r "
+            "WHERE r.id = issues.repository_id AND r.visible)"
+        )
+    )
     params = {"repo_id": repo_id} if repo_id is not None else {}
     label_rows = (
         await session.execute(
             text(
                 "SELECT elem->>'name' AS name, min(elem->>'color') AS color "
                 "FROM issues, jsonb_array_elements(labels) AS elem "
-                f"WHERE NOT is_pull_request {repo_clause} "
+                f"WHERE NOT is_pull_request {repo_clause} {visible_clause} "
                 "GROUP BY elem->>'name' ORDER BY elem->>'name'"
             ),
             params,
@@ -176,7 +186,7 @@ async def issue_facets(
             text(
                 "SELECT DISTINCT elem AS login "
                 "FROM issues, jsonb_array_elements_text(assignees) AS elem "
-                f"WHERE NOT is_pull_request {repo_clause} "
+                f"WHERE NOT is_pull_request {repo_clause} {visible_clause} "
                 "ORDER BY elem"
             ),
             params,
@@ -194,6 +204,10 @@ async def issue_facets(
     )
     if repo_id is not None:
         comp_query = comp_query.where(Issue.repository_id == repo_id)
+    else:
+        comp_query = comp_query.join(
+            Repository, Repository.id == Issue.repository_id
+        ).where(Repository.visible.is_(True))
     components = list((await session.execute(comp_query)).scalars())
     return FacetsOut(
         labels=[LabelFacet(name=row.name, color=row.color or "") for row in label_rows],

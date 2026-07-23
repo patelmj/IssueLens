@@ -37,21 +37,35 @@ class OverviewStats(BaseModel):
 @router.get("/overview", response_model=OverviewStats)
 async def overview_stats(session: AsyncSession = Depends(get_session)) -> OverviewStats:
     connected_repos = (
-        await session.execute(select(func.count()).select_from(Repository))
+        await session.execute(
+            select(func.count())
+            .select_from(Repository)
+            .where(Repository.visible.is_(True))
+        )
     ).scalar_one()
     open_issues = (
         await session.execute(
             select(func.count())
             .select_from(Issue)
-            .where(Issue.state == "open", Issue.is_pull_request.is_(False))
+            .join(Repository, Issue.repository_id == Repository.id)
+            .where(
+                Issue.state == "open",
+                Issue.is_pull_request.is_(False),
+                Repository.visible.is_(True),
+            )
         )
     ).scalar_one()
     last_synced_at = (
-        await session.execute(select(func.max(Repository.last_synced_at)))
+        await session.execute(
+            select(func.max(Repository.last_synced_at)).where(
+                Repository.visible.is_(True)
+            )
+        )
     ).scalar_one()
     top_rows = (
         await session.execute(
             select(Repository.id, Repository.full_name, Repository.open_issues_count)
+            .where(Repository.visible.is_(True))
             .order_by(Repository.open_issues_count.desc(), Repository.full_name)
             .limit(TOP_REPOS_LIMIT)
         )
@@ -63,17 +77,26 @@ async def overview_stats(session: AsyncSession = Depends(get_session)) -> Overvi
     opened_rows = (
         await session.execute(
             select(cast(func.timezone("UTC", Issue.gh_created_at), Date).label("day"), func.count())
-            .where(Issue.is_pull_request.is_(False), Issue.gh_created_at >= window_start)
+            .select_from(Issue)
+            .join(Repository, Issue.repository_id == Repository.id)
+            .where(
+                Issue.is_pull_request.is_(False),
+                Issue.gh_created_at >= window_start,
+                Repository.visible.is_(True),
+            )
             .group_by("day")
         )
     ).all()
     closed_rows = (
         await session.execute(
             select(cast(func.timezone("UTC", Issue.gh_closed_at), Date).label("day"), func.count())
+            .select_from(Issue)
+            .join(Repository, Issue.repository_id == Repository.id)
             .where(
                 Issue.is_pull_request.is_(False),
                 Issue.gh_closed_at.is_not(None),
                 Issue.gh_closed_at >= window_start,
+                Repository.visible.is_(True),
             )
             .group_by("day")
         )

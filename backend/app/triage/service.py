@@ -55,6 +55,8 @@ def _inbox_query(repo_id: int | None, issue_type: str | None, threshold: int) ->
     )
     if repo_id is not None:
         query = query.where(Issue.repository_id == repo_id)
+    else:
+        query = query.where(Repository.visible.is_(True))
     if issue_type:
         query = query.where(IssueClassification.issue_type == issue_type)
     return query

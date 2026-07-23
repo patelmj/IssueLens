@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app
 from tests.test_api_issues import (
     NOW,
+    hide_repo,
     seed_classifications,
     seed_issues,
     seed_readiness,
@@ -394,3 +395,15 @@ async def test_generate_409_when_issue_is_closed(clean_db, api):
     await _seed_closed_issue_scoring()
     resp = await api.post("/issues/2/suggestion")
     assert resp.status_code == 409
+
+
+async def test_inbox_excludes_hidden_repos(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await hide_repo(500)
+    body = await get_body(api, "/triage/inbox?threshold=100")
+    assert [i["title"] for i in body["items"]] == ["Delta task"]
+    # explicit repo_id scoping still reaches the hidden repo
+    scoped = await get_body(api, "/triage/inbox?threshold=100&repo_id=500")
+    assert [i["title"] for i in scoped["items"]] == ["Alpha bug"]

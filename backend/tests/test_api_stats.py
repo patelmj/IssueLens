@@ -122,3 +122,23 @@ async def test_top_repos_capped_at_five_in_order(clean_db, api):
         "patelmj/r-d",   # 6
         "patelmj/r-e",   # 4
     ]
+
+
+async def hide_repo(repo_id: int) -> None:
+    async with get_sessionmaker()() as session:
+        repo = await session.get(Repository, repo_id)
+        repo.visible = False
+        await session.commit()
+
+
+async def test_overview_stats_exclude_hidden_repos(clean_db, api):
+    await seed_overview_data()
+    await hide_repo(500)
+    async with api as client:
+        resp = await client.get("/stats/overview")
+    body = resp.json()
+    assert body["connected_repos"] == 1
+    assert body["open_issues"] == 0  # both open issues live in hidden repo 500
+    assert [r["full_name"] for r in body["top_repos"]] == ["patelmj/IssueLens"]
+    assert body["activity"] == []  # opened issue 1 and closed issue 3 are in repo 500
+    assert body["last_synced_at"] is not None  # repo 501 still visible
