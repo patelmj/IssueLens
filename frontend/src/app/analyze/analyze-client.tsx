@@ -7,6 +7,7 @@ import { InfoTip } from "./info-tip";
 import { card, type CompletedAnalytics } from "./shared";
 import { VelocityChart } from "./velocity-chart";
 import { CycleHistogram } from "./cycle-histogram";
+import { CompletionHeatmap } from "./completion-heatmap";
 
 const WINDOWS = ["30d", "90d", "1y", "all"] as const;
 
@@ -121,7 +122,7 @@ export function AnalyzeClient() {
             </div>
             <VelocityChart weekly={data.weekly} />
             <div className="grid grid-cols-1 gap-4 min-[720px]:grid-cols-2">
-              {/* Task 6 mounts <CompletionHeatmap cells={data.heatmap} /> */}
+              <CompletionHeatmap cells={data.heatmap} />
               <CycleHistogram buckets={data.cycle_buckets} totals={t} />
             </div>
           </div>
