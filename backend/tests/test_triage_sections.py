@@ -59,3 +59,21 @@ def test_footnote_excludes_removed_ai_sections():
 def test_compose_empty_base_has_no_leading_gap():
     body = compose_proposed_body("", [scaffold_section("environment")])
     assert body.startswith("## Environment")
+
+
+def test_footnote_exact_string_single_ai_section():
+    note = footnote([ai_section()])
+    assert note == (
+        '---\n*Sections "Reproduction Steps" drafted by qwen3:8b '
+        "from the existing report — please confirm or correct.*"
+    )
+
+
+def test_footnote_three_names_join_with_commas_and_and():
+    three = [
+        ai_section(),
+        ai_section(rid="expected_behavior", heading="Expected Behavior"),
+        ai_section(rid="actual_behavior", heading="Actual Behavior"),
+    ]
+    note = footnote(three)
+    assert '"Reproduction Steps", "Expected Behavior" and "Actual Behavior"' in note
