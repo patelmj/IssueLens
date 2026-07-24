@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -265,38 +266,207 @@ export function SuggestionDrawer({
   );
 }
 
-// Minimal read-only stubs for Task 9 (per-section edit/remove/regenerate/steer).
 function SectionBlock({
+  issueId,
   section,
+  locked,
+  applyResult,
 }: {
   issueId: number;
   section: Section;
   locked: boolean;
   applyResult: (data: Suggestion) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(section.body_md);
+  const [steering, setSteering] = useState(false);
+  const [steer, setSteer] = useState("");
+  const [flash, setFlash] = useState(false);
+
+  const patch = useMutation({
+    mutationFn: (body: { body_md?: string; removed?: boolean }) =>
+      sendJson<Suggestion>(
+        `${base}/${issueId}/suggestion/sections/${section.requirement_id}`,
+        "PATCH",
+        body,
+      ),
+    onSuccess: (data) => {
+      setEditing(false);
+      applyResult(data);
+    },
+  });
+  const regenerate = useMutation({
+    mutationFn: (steerText: string | null) =>
+      sendJson<Suggestion>(
+        `${base}/${issueId}/suggestion/sections/${section.requirement_id}/regenerate`,
+        "POST",
+        { steer: steerText },
+      ),
+    onSuccess: (data) => {
+      setSteering(false);
+      setSteer("");
+      setFlash(true);
+      setTimeout(() => setFlash(false), 1200);
+      applyResult(data);
+    },
+  });
+
+  const act =
+    "text-[11px] text-(--color-text-muted) transition-all duration-150 hover:text-(--color-primary)";
+
   return (
     <div
-      className="mt-2 rounded-r-lg border-l-[3px] border-(--type-feature) bg-(--type-feature)/10 px-3 py-2"
+      className={`group mt-2 rounded-r-lg border-l-[3px] border-(--type-feature) px-3 py-2 transition-all duration-150 ${
+        flash ? "bg-(--flash)" : ""
+      }`}
+      style={
+        flash
+          ? undefined
+          : { background: "color-mix(in srgb, var(--type-feature) 10%, transparent)" }
+      }
       data-testid={`section-block-${section.requirement_id}`}
     >
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold">{section.heading}</span>
         <SectionChip section={section} />
+        {section.edited ? (
+          <span className="text-[10px] text-(--color-text-muted)">edited</span>
+        ) : null}
         {section.stale ? (
-          <span className="text-[10px] text-(--color-text-muted)">base changed</span>
+          <span className="text-[10px] text-(--color-text-muted)" data-testid={`stale-${section.requirement_id}`}>
+            base changed
+          </span>
+        ) : null}
+        {regenerate.isPending ? (
+          <span className="text-[10px] text-(--color-primary)" data-testid={`section-spinner-${section.requirement_id}`}>
+            redrafting…
+          </span>
         ) : null}
       </div>
-      <Markdown>{section.body_md}</Markdown>
+
+      {editing ? (
+        <div className="mt-1 flex flex-col gap-2">
+          <textarea
+            aria-label={`Edit ${section.heading}`}
+            className="min-h-24 rounded-lg border border-(--color-border) bg-(--color-surface) p-2 font-mono text-[12px]"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            data-testid={`section-editor-${section.requirement_id}`}
+          />
+          <div className="flex gap-2">
+            <button type="button" className={btn} onClick={() => patch.mutate({ body_md: draft })}>
+              Save section
+            </button>
+            <button type="button" className={btn} onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <Markdown>{section.body_md}</Markdown>
+      )}
+
+      {!locked && !editing ? (
+        <div className="mt-1 flex gap-3 opacity-0 transition-all duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+          <button
+            type="button"
+            className={act}
+            onClick={() => regenerate.mutate(null)}
+            data-testid={`regen-${section.requirement_id}`}
+          >
+            ↻ {section.origin === "ai" ? "Regenerate" : "Try a draft"}
+          </button>
+          <button
+            type="button"
+            className={act}
+            onClick={() => setSteering((v) => !v)}
+            data-testid={`steer-${section.requirement_id}`}
+          >
+            ✎ Steer…
+          </button>
+          <button
+            type="button"
+            className={act}
+            onClick={() => {
+              setDraft(section.body_md);
+              setEditing(true);
+            }}
+            data-testid={`edit-${section.requirement_id}`}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className={`${act} hover:text-(--type-bug)`}
+            onClick={() => patch.mutate({ removed: true })}
+            data-testid={`remove-${section.requirement_id}`}
+          >
+            ✕ Remove
+          </button>
+        </div>
+      ) : null}
+
+      {steering ? (
+        <div
+          className="mt-2 flex flex-col gap-2 rounded-lg border border-(--color-border) bg-(--color-surface) p-2 shadow-md"
+          data-testid={`steer-popover-${section.requirement_id}`}
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-(--color-text-muted)">
+            Steer this draft
+          </div>
+          <textarea
+            aria-label={`Steer ${section.heading}`}
+            className="min-h-16 rounded-lg border border-(--color-border) bg-(--color-bg) p-2 text-[12px]"
+            placeholder="Add guidance for the redraft — extra details, corrections, emphasis…"
+            value={steer}
+            onChange={(e) => setSteer(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`${btn} text-(--color-primary)`}
+              disabled={regenerate.isPending}
+              onClick={() => regenerate.mutate(steer || null)}
+              data-testid={`steer-submit-${section.requirement_id}`}
+            >
+              Redraft section
+            </button>
+            <button type="button" className={btn} onClick={() => setSteering(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function RestoreChip({
+  issueId,
   section,
+  applyResult,
 }: {
   issueId: number;
   section: Section;
   applyResult: (data: Suggestion) => void;
 }) {
-  return <span className="rounded-full border border-(--color-border) px-2 py-0.5">{section.heading}</span>;
+  const restore = useMutation({
+    mutationFn: () =>
+      sendJson<Suggestion>(
+        `${base}/${issueId}/suggestion/sections/${section.requirement_id}`,
+        "PATCH",
+        { removed: false },
+      ),
+    onSuccess: applyResult,
+  });
+  return (
+    <button
+      type="button"
+      className="rounded-full border border-(--color-border) px-2 py-0.5 transition-all duration-150 hover:bg-(--accent-tint)"
+      onClick={() => restore.mutate()}
+      data-testid={`restore-${section.requirement_id}`}
+    >
+      {section.heading} ↩
+    </button>
+  );
 }

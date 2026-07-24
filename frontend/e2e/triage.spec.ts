@@ -53,6 +53,20 @@ async function stub(page: Page) {
   await page.route(/\/api\/backend\/issues\/1\/suggestion\/push$/, (r: Route) =>
     r.fulfill({ json: { ...suggestion, status: "pushed" } }),
   );
+  await page.route(/\/api\/backend\/issues\/1\/suggestion\/sections\/[^/]+$/, (r: Route) => {
+    const rid = r.request().url().match(/sections\/([^/]+)$/)?.[1];
+    const parsed = JSON.parse(r.request().postData() ?? "{}");
+    const sections = suggestion.sections.map((s) =>
+      s.requirement_id === rid
+        ? {
+            ...s,
+            ...(parsed.body_md !== undefined ? { body_md: parsed.body_md, edited: true } : {}),
+            ...(parsed.removed !== undefined ? { removed: parsed.removed } : {}),
+          }
+        : s,
+    );
+    return r.fulfill({ json: { ...suggestion, sections } });
+  });
   await page.route(/\/api\/backend\/issues\/1\/suggestion$/, (r: Route) => {
     if (r.request().method() === "PATCH") {
       const parsed = JSON.parse(r.request().postData() ?? "{}");
@@ -106,20 +120,16 @@ test("approve & push marks the suggestion pushed", async ({ page }) => {
   await expect(page.getByTestId("suggestion-drawer")).toContainText("pushed");
 });
 
-test.fixme(
-  "editing a section body saves a per-section edit",
-  // enabled in Task 9: the old whole-body "Save edits" textarea is gone;
-  // Task 9 adds per-section edit controls on SectionBlock that this will target.
-  async ({ page }) => {
-    await stub(page);
-    await page.goto("/triage");
-    await expect(async () => {
-      await page.getByRole("button", { name: "Suggest fixes" }).click();
-      await expect(page.getByTestId("suggestion-drawer")).toBeVisible();
-    }).toPass();
-    await page.getByTestId("section-block-repro_steps").getByRole("button", { name: "Edit" }).click();
-    await page.getByRole("textbox", { name: "Edit section" }).fill("1. Log in\n2. Refresh\n");
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByTestId("section-chip-repro_steps")).toContainText("edited");
-  },
-);
+test("editing a section body saves a per-section edit", async ({ page }) => {
+  await stub(page);
+  await page.goto("/triage");
+  await expect(async () => {
+    await page.getByRole("button", { name: "Suggest fixes" }).click();
+    await expect(page.getByTestId("suggestion-drawer")).toBeVisible();
+  }).toPass();
+  await page.getByTestId("section-block-repro_steps").hover();
+  await page.getByTestId("edit-repro_steps").click();
+  await page.getByTestId("section-editor-repro_steps").fill("1. Log in\n2. Refresh\n");
+  await page.getByRole("button", { name: "Save section" }).click();
+  await expect(page.getByTestId("section-block-repro_steps")).toContainText("edited");
+});
