@@ -11,6 +11,7 @@ from app.llm.classify import classify_repository_issues
 from app.llm.ollama import make_ollama_client
 from app.llm.priority import score_repository_priorities
 from app.llm.readiness import score_repository_issues
+from app.triage.drafting import draft_repository_suggestions
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,42 @@ async def score_readiness_repository(ctx: dict, repo_id: int) -> int:
 
 async def score_priority_repository(ctx: dict, repo_id: int) -> int:
     async with get_sessionmaker()() as session, make_ollama_client() as client:
-        return await score_repository_priorities(session, client, repo_id)
+        count = await score_repository_priorities(session, client, repo_id)
+    redis = ctx.get("redis")
+    if redis is not None:
+        await redis.enqueue_job(
+            "draft_suggestions_repository", repo_id, _job_id=f"draft-{repo_id}"
+        )
+    return count
+
+
+async def draft_suggestions_repository(ctx: dict, repo_id: int) -> int:
+    async with (
+        get_sessionmaker()() as session,
+        make_ollama_client() as ollama,
+        make_http_client() as gh,
+    ):
+        return await draft_repository_suggestions(session, ollama, gh, repo_id)
+
+
+async def draft_all_repositories(ctx: dict) -> int:
+    """Safety net for issues scored while the worker was down; dedupe-keyed."""
+    from sqlalchemy import select
+
+    from app.models import Repository
+
+    async with get_sessionmaker()() as session:
+        repo_ids = list((await session.execute(select(Repository.id))).scalars())
+    done = 0
+    for repo_id in repo_ids:
+        try:
+            await ctx["redis"].enqueue_job(
+                "draft_suggestions_repository", repo_id, _job_id=f"draft-{repo_id}"
+            )
+            done += 1
+        except Exception:
+            logger.exception("draft sweep failed for repo %s", repo_id)
+    return done
 
 
 async def priority_all_repositories(ctx: dict) -> int:
@@ -188,12 +224,14 @@ class WorkerSettings:
         classify_repository,
         score_readiness_repository,
         score_priority_repository,
+        draft_suggestions_repository,
     ]
     cron_jobs = [
         cron(reconcile_all_repositories, name="reconcile_all_repositories", minute={0, 30}),
         cron(classify_all_repositories, name="classify_all_repositories", minute={15, 45}),
         cron(score_all_repositories, name="score_all_repositories", minute={20, 50}),
         cron(priority_all_repositories, name="priority_all_repositories", minute={25, 55}),
+        cron(draft_all_repositories, name="draft_all_repositories", minute={5, 35}),
         cron(expire_stuck_sync_jobs, name="expire_stuck_sync_jobs", minute={10, 40}),
     ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

@@ -22,7 +22,7 @@ from app.models import (
     Repository,
 )
 from app.queue import get_arq_pool
-from app.triage.scaffold import build_proposed_body
+from app.triage.sections import compose_proposed_body, scaffold_section
 
 logger = logging.getLogger(__name__)
 
@@ -138,9 +138,8 @@ async def generate_suggestion(session: AsyncSession, issue_id: int) -> IssueSugg
     if issue.state != "open":
         raise SuggestionConflict("issue is not open")
     missing = missing_requirements(readiness.issue_type, readiness.factors)
-    proposed, _applied = build_proposed_body(
-        issue.body or "", [m["id"] for m in missing]
-    )
+    sections = [scaffold_section(m["id"]) for m in missing]
+    proposed = compose_proposed_body(issue.body or "", sections)
     values = {
         "issue_id": issue_id,
         "status": "draft",
@@ -148,6 +147,8 @@ async def generate_suggestion(session: AsyncSession, issue_id: int) -> IssueSugg
         "base_gh_updated_at": issue.gh_updated_at,
         "proposed_body": proposed,
         "missing_requirements": missing,
+        "sections": sections,
+        "drafted_at": None,
         "edited": False,
         "updated_at": func.now(),
         "pushed_at": None,
@@ -163,6 +164,19 @@ async def generate_suggestion(session: AsyncSession, issue_id: int) -> IssueSugg
     await session.commit()
     sug = await get_suggestion(session, issue_id)
     assert sug is not None
+    try:
+        pool = await get_arq_pool()
+        await pool.enqueue_job(
+            "draft_suggestions_repository",
+            issue.repository_id,
+            _job_id=f"draft-{issue.repository_id}",
+        )
+    except Exception:
+        logger.warning(
+            "failed to enqueue drafting for repo %s after suggestion generate",
+            issue.repository_id,
+            exc_info=True,
+        )
     return sug
 
 

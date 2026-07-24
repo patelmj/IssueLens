@@ -144,6 +144,10 @@ class IssueSuggestion(Base):
     proposed_body: Mapped[str] = mapped_column(Text)
     missing_requirements: Mapped[list] = mapped_column(JSONB, default=list)
     edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    sections: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    drafted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

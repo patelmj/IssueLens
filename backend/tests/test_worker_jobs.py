@@ -8,10 +8,11 @@ def test_sync_job_registered():
 
 
 def test_reconcile_cron_registered():
-    assert len(worker.WorkerSettings.cron_jobs) == 5
+    assert len(worker.WorkerSettings.cron_jobs) == 6
     cron_names = {job.name for job in worker.WorkerSettings.cron_jobs}
     assert "reconcile_all_repositories" in cron_names
     assert "classify_all_repositories" in cron_names
     assert "score_all_repositories" in cron_names
     assert "priority_all_repositories" in cron_names
+    assert "draft_all_repositories" in cron_names
     assert "expire_stuck_sync_jobs" in cron_names

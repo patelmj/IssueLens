@@ -17,6 +17,12 @@
   --type-debt: #9a6700;
   --type-question: #1b7c83;
   --type-docs: #57606a;
+  --type-task: #eda100;
+  --viz-seq-1: #a2a2eb;
+  --viz-seq-2: #8585e0;
+  --viz-seq-3: #6868d3;
+  --viz-seq-4: #4f4fc0;
+  --viz-seq-5: #3a3aa0;
   --chart-opened: #2a78d6;
   --chart-closed: #008300;
   --chart-grid: #e7e6e1;
@@ -50,6 +56,12 @@
   --type-debt: #d4a72c;
   --type-question: #39c5cf;
   --type-docs: #9698a1;
+  --type-task: #c98500;
+  --viz-seq-1: #45457a;
+  --viz-seq-2: #5757a5;
+  --viz-seq-3: #6b6bc8;
+  --viz-seq-4: #8484e5;
+  --viz-seq-5: #a5a5f7;
   --chart-opened: #3987e5;
   --chart-closed: #008300;
   --chart-grid: #2c2c2a;
