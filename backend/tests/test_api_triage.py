@@ -88,7 +88,7 @@ async def test_generate_missing_issue_404(clean_db, api):
     assert resp.status_code == 404
 
 
-async def test_generate_then_get_produces_scaffold_and_diff(clean_db, api):
+async def test_generate_then_get_produces_scaffold_sections(clean_db, api):
     await seed_issues()
     await seed_classifications()
     await seed_readiness()
@@ -98,7 +98,10 @@ async def test_generate_then_get_produces_scaffold_and_diff(clean_db, api):
     assert data["status"] == "draft"
     assert data["edited"] is False
     assert "## Reproduction Steps" in data["proposed_body"]
-    assert any(o["op"] == "add" for o in data["diff"])
+    assert data["drafted_at"] is None
+    rids = [s["requirement_id"] for s in data["sections"]]
+    assert "repro_steps" in rids
+    assert all(s["origin"] == "scaffold" for s in data["sections"])
     assert {"id": "repro_steps", "label": "Reproduction steps"} in data["missing_requirements"]
     # reload
     got = await get_body(api, "/issues/1/suggestion")
@@ -112,7 +115,7 @@ async def test_get_404_when_absent(clean_db, api):
     assert resp.status_code == 404
 
 
-async def test_edit_sets_edited_and_rediffs(clean_db, api):
+async def test_edit_sets_edited_and_updates_body(clean_db, api):
     await seed_issues()
     await seed_classifications()
     await seed_readiness()
@@ -122,7 +125,6 @@ async def test_edit_sets_edited_and_rediffs(clean_db, api):
     data = resp.json()
     assert data["edited"] is True
     assert data["proposed_body"] == "totally new body"
-    assert any(o["op"] == "add" and o["line"] == "totally new body" for o in data["diff"])
 
 
 async def test_save_as_suggestion_and_reject(clean_db, api):
@@ -407,3 +409,31 @@ async def test_inbox_excludes_hidden_repos(clean_db, api):
     # explicit repo_id scoping still reaches the hidden repo
     scoped = await get_body(api, "/triage/inbox?threshold=100&repo_id=500")
     assert [i["title"] for i in scoped["items"]] == ["Alpha bug"]
+
+
+async def test_patch_section_edit_and_remove(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+    resp = await api.patch(
+        "/issues/1/suggestion/sections/repro_steps", json={"body_md": "1. my steps"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    section = next(s for s in data["sections"] if s["requirement_id"] == "repro_steps")
+    assert section["edited"] is True
+    assert "1. my steps" in data["proposed_body"]
+    resp = await api.patch(
+        "/issues/1/suggestion/sections/repro_steps", json={"removed": True}
+    )
+    assert "1. my steps" not in resp.json()["proposed_body"]
+
+
+async def test_patch_unknown_section_404(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+    resp = await api.patch("/issues/1/suggestion/sections/nope", json={"removed": True})
+    assert resp.status_code == 404

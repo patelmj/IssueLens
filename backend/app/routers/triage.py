@@ -6,9 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.llm.ollama import make_ollama_client
 from app.models import IssueSuggestion
-from app.triage import service
-from app.triage.diff import build_diff
+from app.triage import drafting, service
 
 router = APIRouter(tags=["triage"])
 
@@ -52,6 +52,17 @@ async def triage_inbox(
     return InboxPage(items=items, total=total, limit=limit, offset=offset)
 
 
+class SectionOut(BaseModel):
+    requirement_id: str
+    heading: str
+    body_md: str
+    origin: Literal["ai", "scaffold"]
+    model: str | None
+    edited: bool
+    removed: bool
+    stale: bool
+
+
 class SuggestionOut(BaseModel):
     issue_id: int
     status: str
@@ -59,7 +70,8 @@ class SuggestionOut(BaseModel):
     proposed_body: str
     missing_requirements: list[MissingItem]
     edited: bool
-    diff: list[dict]
+    sections: list[SectionOut]
+    drafted_at: datetime | None
     pushed_at: datetime | None
 
 
@@ -76,9 +88,19 @@ def _to_out(sug: IssueSuggestion) -> SuggestionOut:
         proposed_body=sug.proposed_body,
         missing_requirements=sug.missing_requirements,
         edited=sug.edited,
-        diff=build_diff(sug.base_body, sug.proposed_body),
+        sections=sug.sections or [],
+        drafted_at=sug.drafted_at,
         pushed_at=sug.pushed_at,
     )
+
+
+class SectionPatch(BaseModel):
+    body_md: str | None = None
+    removed: bool | None = None
+
+
+class SteerBody(BaseModel):
+    steer: str | None = None
 
 
 @router.post("/issues/{issue_id}/suggestion", response_model=SuggestionOut)
@@ -137,4 +159,52 @@ async def push(
         raise HTTPException(status_code=409, detail=str(exc))
     except service.GitHubWriteError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+    return _to_out(sug)
+
+
+@router.post(
+    "/issues/{issue_id}/suggestion/sections/{requirement_id}/regenerate",
+    response_model=SuggestionOut,
+)
+async def regenerate_section(
+    issue_id: int,
+    requirement_id: str,
+    body: SteerBody,
+    session: AsyncSession = Depends(get_session),
+) -> SuggestionOut:
+    try:
+        async with make_ollama_client() as ollama:
+            sug = await drafting.regenerate_section(
+                session, ollama, None, issue_id, requirement_id, steer=body.steer
+            )
+    except service.SuggestionNotFound:
+        raise HTTPException(status_code=404, detail="No suggestion for this issue")
+    except drafting.SectionNotFound:
+        raise HTTPException(status_code=404, detail="No such section")
+    except service.SuggestionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _to_out(sug)
+
+
+@router.patch(
+    "/issues/{issue_id}/suggestion/sections/{requirement_id}",
+    response_model=SuggestionOut,
+)
+async def patch_section(
+    issue_id: int,
+    requirement_id: str,
+    patch: SectionPatch,
+    session: AsyncSession = Depends(get_session),
+) -> SuggestionOut:
+    try:
+        sug = await drafting.patch_section(
+            session, issue_id, requirement_id,
+            body_md=patch.body_md, removed=patch.removed,
+        )
+    except service.SuggestionNotFound:
+        raise HTTPException(status_code=404, detail="No suggestion for this issue")
+    except drafting.SectionNotFound:
+        raise HTTPException(status_code=404, detail="No such section")
+    except service.SuggestionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     return _to_out(sug)
