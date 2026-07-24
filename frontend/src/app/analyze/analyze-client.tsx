@@ -8,6 +8,7 @@ import { card, type CompletedAnalytics } from "./shared";
 import { VelocityChart } from "./velocity-chart";
 import { CycleHistogram } from "./cycle-histogram";
 import { CompletionHeatmap } from "./completion-heatmap";
+import { StreakCard, RepoBars, RecentFeed } from "./rail-cards";
 
 const WINDOWS = ["30d", "90d", "1y", "all"] as const;
 
@@ -127,7 +128,9 @@ export function AnalyzeClient() {
             </div>
           </div>
           <div className="flex flex-col gap-4">
-            {/* Task 7 mounts <StreakCard streak={data.streak} />, <RepoBars repos={data.repos} />, <RecentFeed recent={data.recent} /> */}
+            <StreakCard streak={data.streak} />
+            <RepoBars repos={data.repos} />
+            <RecentFeed recent={data.recent} />
           </div>
         </div>
       )}
