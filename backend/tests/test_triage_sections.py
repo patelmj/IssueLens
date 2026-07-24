@@ -77,3 +77,19 @@ def test_footnote_three_names_join_with_commas_and_and():
     ]
     note = footnote(three)
     assert '"Reproduction Steps", "Expected Behavior" and "Actual Behavior"' in note
+
+
+def test_compose_skips_section_whose_heading_already_in_base():
+    base = "Intro text\n\n## Environment\n<!-- stub, empty -->\n"
+    s = scaffold_section("environment")
+    body = compose_proposed_body(base, [s])
+    assert body.count("## Environment") == 1
+    assert s["body_md"] not in body
+
+
+def test_footnote_excludes_heading_present_ai_section():
+    base = "## Reproduction Steps\n<!-- stub -->\n"
+    s = ai_section()  # requirement_id="repro_steps", heading="Reproduction Steps"
+    body = compose_proposed_body(base, [s])
+    assert body.count("## Reproduction Steps") == 1
+    assert "please confirm" not in body
