@@ -5,6 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getJson } from "../../lib/api";
 import { InfoTip } from "./info-tip";
 import { card, type CompletedAnalytics } from "./shared";
+import { VelocityChart } from "./velocity-chart";
+import { CycleHistogram } from "./cycle-histogram";
 
 const WINDOWS = ["30d", "90d", "1y", "all"] as const;
 
@@ -117,10 +119,10 @@ export function AnalyzeClient() {
               <Kpi value={t.median_cycle_days === null ? "—" : `${t.median_cycle_days}d`} label="median cycle" metric="median_cycle" testId="kpi-cycle" />
               <Kpi value={t.do_first_pct === null ? "—" : `${t.do_first_pct}%`} label="closed in Do First" metric="do_first" testId="kpi-dofirst" />
             </div>
-            {/* Task 5 mounts <VelocityChart weekly={data.weekly} /> here */}
+            <VelocityChart weekly={data.weekly} />
             <div className="grid grid-cols-1 gap-4 min-[720px]:grid-cols-2">
               {/* Task 6 mounts <CompletionHeatmap cells={data.heatmap} /> */}
-              {/* Task 5 mounts <CycleHistogram buckets={data.cycle_buckets} totals={t} /> */}
+              <CycleHistogram buckets={data.cycle_buckets} totals={t} />
             </div>
           </div>
           <div className="flex flex-col gap-4">
