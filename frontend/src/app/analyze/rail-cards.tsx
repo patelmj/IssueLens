@@ -90,7 +90,7 @@ export function RepoBars({ repos }: { repos: CompletedAnalytics["repos"] }) {
 export function RecentFeed({ recent }: { recent: CompletedAnalytics["recent"] }) {
   return (
     <div className={`${card} flex-1`} data-testid="recent-feed">
-      <div className="text-[12px] font-semibold">Recently completed</div>
+      <h3 className="text-[12px] font-semibold m-0">Recently completed</h3>
       {recent.map((r) => (
         <div
           key={`${r.repo}-${r.number}`}
