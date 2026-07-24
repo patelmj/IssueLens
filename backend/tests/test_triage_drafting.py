@@ -221,3 +221,76 @@ async def test_repo_sweep_drafts_eligible_and_records_job(clean_db):
             (await session.execute(select(SyncJob).where(SyncJob.kind == "draft"))).scalars()
         )
         assert [j.status for j in jobs] == ["success", "success"]
+
+
+@respx.mock
+async def test_redraft_preserves_removed_flag_on_uneditied_section(clean_db):
+    mock_tags()
+    respx.post(f"{OLLAMA}/api/chat").mock(
+        side_effect=[
+            chat({
+                "repro_steps": {"grounded": True, "body_md": "1. Go to /login\n2. Wrong password"},
+                "environment": {"grounded": False, "body_md": ""},
+            }),
+            chat({
+                "repro_steps": {"grounded": True, "body_md": "fresh repro steps"},
+                "environment": {"grounded": False, "body_md": "fresh environment"},
+            }),
+        ]
+    )
+    async with get_sessionmaker()() as session:
+        await seed(session)
+        async with make_ollama_client() as ollama:
+            sug = await draft_issue_suggestion(session, ollama, None, 1)
+            await patch_section(session, 1, "environment", removed=True)
+            sug = await draft_issue_suggestion(session, ollama, None, 1)
+    by_rid = {s["requirement_id"]: s for s in sug.sections}
+    assert by_rid["environment"]["removed"] is True
+
+
+@respx.mock
+async def test_patch_section_does_not_set_drafted_at(clean_db):
+    mock_tags()
+    async with get_sessionmaker()() as session:
+        await seed(session)
+        await seed_scaffold_suggestion(session)
+        sug = await service.get_suggestion(session, 1)
+        assert sug.drafted_at is None
+        await patch_section(session, 1, "environment", body_md="my words")
+        sug = await service.get_suggestion(session, 1)
+        assert sug.drafted_at is None
+        await patch_section(session, 1, "repro_steps", removed=True)
+        sug = await service.get_suggestion(session, 1)
+        assert sug.drafted_at is None
+
+
+@respx.mock
+async def test_regenerate_from_edited_section_clears_edited_and_stale(clean_db):
+    mock_tags()
+    respx.post(f"{OLLAMA}/api/chat").mock(
+        side_effect=[
+            chat({
+                "repro_steps": {"grounded": True, "body_md": "initial repro"},
+                "environment": {"grounded": False, "body_md": ""},
+            }),
+            chat({
+                "repro_steps": {"grounded": True, "body_md": "regenerated repro steps content"},
+            }),
+        ]
+    )
+    async with get_sessionmaker()() as session:
+        await seed(session)
+        async with make_ollama_client() as ollama:
+            sug = await draft_issue_suggestion(session, ollama, None, 1)
+            await patch_section(session, 1, "repro_steps", body_md="my own words")
+            issue = await session.get(Issue, 1)
+            issue.body = "changed body"
+            issue.gh_updated_at = NOW + timedelta(hours=1)
+            await session.commit()
+            sug = await regenerate_section(
+                session, ollama, None, 1, "repro_steps"
+            )
+    by_rid = {s["requirement_id"]: s for s in sug.sections}
+    assert by_rid["repro_steps"]["edited"] is False
+    assert by_rid["repro_steps"]["stale"] is False
+    assert by_rid["repro_steps"]["body_md"] == "regenerated repro steps content"
