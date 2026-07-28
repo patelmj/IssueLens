@@ -1,12 +1,22 @@
 # IssueLens
 
+[![GitHub stars](https://img.shields.io/github/stars/patelmj/IssueLens?style=flat&logo=github)](https://github.com/patelmj/IssueLens/stargazers)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE.md)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/YOUR-BMC-USERNAME)
+
 Developer-centric intelligence dashboard over GitHub Issues.
 Product spec: `issuelens_github_issue_dashboard_spec.md`.
 
 ## Quickstart
 
+Prerequisites:
+
+- **Docker** (Docker Desktop on Windows/macOS) with Compose v2
+- **Node.js 20+** — only for the host dev loop and frontend tests
+- **[uv](https://docs.astral.sh/uv/)** — only for running backend tests on the host
+
 ```sh
-docker compose up --build        # postgres+pgvector, redis, backend :8000, worker, frontend :3005
+docker compose up --build        # postgres+pgvector, redis, ollama, backend :8000, worker, frontend :3005
 ```
 
 Migrations run automatically on every `docker compose up`: the one-shot `migrate`
@@ -61,7 +71,8 @@ backend:
 
 ```sh
 docker compose up -d postgres redis backend worker
-cd frontend && npm run dev:local     # clears .next, runs next dev on the host
+cd frontend && npm install           # first time only
+npm run dev:local                    # clears .next, runs next dev on the host
 ```
 
 ### Known traps
@@ -79,7 +90,7 @@ cd backend && uv run pytest -v
 # Frontend lint + types
 cd frontend && npm run lint && npm run build
 
-# UI smoke (Playwright CLI)
+# UI smoke (Playwright CLI; first run: npx playwright install chromium)
 cd frontend && npm run test:e2e
 ```
 
@@ -87,3 +98,10 @@ cd frontend && npm run test:e2e
 
 Work lives on the private IssueLens Roadmap board — see `CLAUDE.md` (Task Tracking)
 and the `todos` skill.
+
+## License
+
+Free for personal and noncommercial use under the
+[PolyForm Noncommercial License 1.0.0](LICENSE.md) — contact me for commercial licensing.
+
+Required Notice: Copyright (c) 2026 patelmj (https://github.com/patelmj)
