@@ -2,7 +2,7 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/patelmj/IssueLens?style=flat&logo=github)](https://github.com/patelmj/IssueLens/stargazers)
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE.md)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/YOUR-BMC-USERNAME)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/patelmj)
 
 Developer-centric intelligence dashboard over GitHub Issues.
 Product spec: `issuelens_github_issue_dashboard_spec.md`.
