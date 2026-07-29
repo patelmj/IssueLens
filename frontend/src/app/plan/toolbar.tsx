@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { getJson } from "../../lib/api";
+import { percentOrNull } from "../../lib/table-filters";
 import { COLUMNS, type ColumnKey, type TableParams } from "./plan-client";
 
 type Facets = {
@@ -41,19 +42,17 @@ const READINESS_THRESHOLDS = [
  * of snapping it to the nearest preset — snapping would misreport the filter that's
  * actually applied, which is worse than showing nothing.
  *
- * Junk input handling: a non-numeric value, or one outside the meaningful 1-100
- * readiness-percentage range, is treated as unrepresentable and dropped rather than
- * turned into an absurd option (e.g. "Readiness < -5%" or "Readiness < abc%"). In
- * that case the select falls back to its prior blank-on-unmatched-value behavior;
- * it never crashes.
+ * `canonical` is already sanitized by `percentOrNull` (lib/table-filters.ts): any
+ * integer 0-100 inclusive, with leading zeros normalized away (e.g. "050" -> "50").
+ * That normalization is what makes a hand-typed "050" collapse onto the existing "50"
+ * preset instead of rendering a second, identically-labelled option. Values outside
+ * 0-100, or non-numeric, arrive here as null and fall back to the prior
+ * blank-on-unmatched-value behavior; it never crashes.
  */
-function customReadinessOption(value: string | null) {
-  if (!value) return null;
-  if (READINESS_THRESHOLDS.some((t) => t.value === value)) return null;
-  if (!/^\d{1,3}$/.test(value)) return null;
-  const n = Number(value);
-  if (n <= 0 || n > 100) return null;
-  return { value, label: `Readiness < ${n}%` };
+function customReadinessOption(canonical: string | null) {
+  if (canonical == null) return null;
+  if (READINESS_THRESHOLDS.some((t) => t.value === canonical)) return null;
+  return { value: canonical, label: `Readiness < ${canonical}%` };
 }
 
 export function Toolbar({
@@ -82,7 +81,12 @@ export function Toolbar({
       ),
   });
 
-  const customReadiness = customReadinessOption(maxReadiness ?? null);
+  // Canonicalize before comparing against presets so a leading-zero variant like
+  // "050" collapses onto the "50" preset instead of rendering a duplicate option,
+  // and so "0" (a genuinely valid backend filter, ge=0 in issues.py) is accepted
+  // rather than dropped.
+  const readinessCanonical = percentOrNull(maxReadiness ?? null);
+  const customReadiness = customReadinessOption(readinessCanonical);
   const readinessOptions = customReadiness
     ? (() => {
         const numeric = Number(customReadiness.value);
@@ -94,6 +98,11 @@ export function Toolbar({
         return combined;
       })()
     : READINESS_THRESHOLDS;
+  // The <select>'s value must match one of the option values above exactly; use the
+  // canonicalized form when we have one (e.g. raw "050" -> selects the "50" option)
+  // and fall back to the raw value so genuinely unrepresentable input still renders
+  // blank rather than silently snapping to some option.
+  const readinessSelectValue = readinessCanonical ?? (maxReadiness ?? "");
 
   const [searchText, setSearchText] = useState(q ?? "");
   const [prevQ, setPrevQ] = useState(q);
@@ -223,7 +232,7 @@ export function Toolbar({
       <select
         aria-label="Readiness"
         className={control}
-        value={maxReadiness ?? ""}
+        value={readinessSelectValue}
         onChange={(e) =>
           setParams({ max_readiness: e.target.value || null, offset: null })
         }
