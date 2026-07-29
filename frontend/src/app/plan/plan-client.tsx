@@ -458,7 +458,7 @@ export function PlanClient() {
                     ) : null}
                     </tr>
                     {expandedId === row.id ? (
-                      <tr className="border-b border-(--color-border) bg-(--accent-tint)">
+                      <tr className="border-b border-(--color-border) last:border-b-0 bg-(--accent-tint)">
                         <td colSpan={shownColumns.length} className="px-3 py-3">
                           <ReadinessDrawer issueId={row.id} />
                         </td>
