@@ -44,7 +44,7 @@ export function DoFirstSpotlight({
       ) : (
         <ul className="flex flex-col">
           {items.map((item) => {
-            const size = radiusOf(item.estimate);
+            const size = Math.min(2 * radiusOf(item.estimate), 28);
             return (
               <li key={item.issue_id}>
                 <button
