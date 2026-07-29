@@ -41,7 +41,7 @@ def _require_app_config() -> None:
 async def _list_repos(
     session: AsyncSession, include_hidden: bool = False
 ) -> list[Repository]:
-    query = select(Repository).order_by(Repository.full_name)
+    query = select(Repository).order_by(Repository.full_name, Repository.id)
     if not include_hidden:
         query = query.where(Repository.visible.is_(True))
     result = await session.execute(query)

@@ -134,12 +134,15 @@ async def test_list_include_hidden_returns_all(clean_db, api):
     async with api as client:
         resp = await client.get("/repositories?include_hidden=true")
     body = resp.json()
-    # Sort order follows the DB's collation (case-insensitive-ish locale sort
-    # puts "hidden-repo" before "IssueLens"), not ASCII/byte order.
-    assert [(r["full_name"], r["visible"]) for r in body] == [
+    # Ordering is collation-dependent (locale-aware sort can put "hidden-repo"
+    # before or after "IssueLens"), so assert membership/visibility as a set
+    # rather than a specific sequence - the intent here is that include_hidden
+    # returns ALL repos, including hidden ones.
+    assert {(r["full_name"], r["visible"]) for r in body} == {
         ("patelmj/hidden-repo", False),
         ("patelmj/IssueLens", True),
-    ]
+    }
+    assert len(body) == 2
 
 
 async def test_patch_visibility_toggles(clean_db, api):
