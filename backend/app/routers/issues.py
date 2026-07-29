@@ -72,7 +72,7 @@ def _filtered_query(
     max_readiness: int | None,
 ) -> Select:
     query = (
-        select(Issue, Repository.full_name, IssueClassification, IssueReadiness)
+        select(Issue, Repository.full_name, IssueClassification, IssueReadiness.score)
         .join(Repository, Issue.repository_id == Repository.id)
         .outerjoin(IssueClassification, IssueClassification.issue_id == Issue.id)
         .outerjoin(IssueReadiness, IssueReadiness.issue_id == Issue.id)
@@ -136,10 +136,10 @@ async def list_issues(
             classification_confidence=(
                 classification.confidence if classification else None
             ),
-            readiness_score=readiness.score if readiness else None,
+            readiness_score=readiness_score,
             **{field: getattr(issue, field) for field in ISSUE_FIELDS},
         )
-        for issue, full_name, classification, readiness in rows
+        for issue, full_name, classification, readiness_score in rows
     ]
     return IssuePage(items=items, total=total, limit=limit, offset=offset)
 
