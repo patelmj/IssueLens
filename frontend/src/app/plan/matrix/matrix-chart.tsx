@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+} from "react";
 import { iAt, PLOT, radiusOf, resolveCollisions, uAt, VIEW_H, VIEW_W, xOf, yOf } from "./matrix-layout";
 import {
   SERIES_VAR,
@@ -15,6 +23,7 @@ const DRAG_THRESHOLD_PX = 3;
 
 type DragState = {
   issueId: number;
+  pointerId: number;
   startX: number;
   startY: number;
   moved: boolean;
@@ -59,14 +68,26 @@ export function MatrixChart({
   }, [plotted]);
   const popStep = Math.min(70, 1400 / Math.max(plotted.length - 1, 1));
 
-  const clientToChart = (e: PointerEvent): { u: number; i: number } => {
-    const rect = svgRef.current!.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * VIEW_W;
-    const y = ((e.clientY - rect.top) / rect.height) * VIEW_H;
-    const u = uAt(x);
-    const i = iAt(y);
-    return { u, i };
-  };
+  const dragRef = useRef<DragState | null>(null);
+  dragRef.current = drag;
+  const onPinRef = useRef(onPin);
+  onPinRef.current = onPin;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+
+  const clientToChart = useCallback(
+    (point: { clientX: number; clientY: number }): { u: number; i: number } | null => {
+      const svg = svgRef.current;
+      if (!svg) return null;
+      const rect = svg.getBoundingClientRect();
+      const x = ((point.clientX - rect.left) / rect.width) * VIEW_W;
+      const y = ((point.clientY - rect.top) / rect.height) * VIEW_H;
+      return { u: uAt(x), i: iAt(y) };
+    },
+    [],
+  );
 
   const onBubbleDown = (item: PlottedItem) => (e: PointerEvent<SVGGElement>) => {
     try {
@@ -74,10 +95,11 @@ export function MatrixChart({
         e.pointerId,
       );
     } catch {
-      // pointer capture is best-effort; drag still works without it
+      // best-effort: the window listeners below complete the gesture either way
     }
     setDrag({
       issueId: item.issue_id,
+      pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       moved: false,
@@ -86,26 +108,61 @@ export function MatrixChart({
     });
   };
 
-  const onBubbleMove = (e: PointerEvent<SVGGElement>) => {
-    if (!drag) return;
-    const dx = e.clientX - drag.startX;
-    const dy = e.clientY - drag.startY;
-    const moved =
-      drag.moved || Math.hypot(dx, dy) > DRAG_THRESHOLD_PX;
-    const { u, i } = clientToChart(e);
-    setDrag({ ...drag, moved, u, i });
-  };
+  // The gesture must survive losing pointer capture (touch cancels, SVG capture
+  // quirks, fast flicks that outrun the one-render-behind bubble), so move/up/
+  // cancel are tracked on window for the duration of a drag rather than on the
+  // bubble element.
+  const dragging = drag !== null;
+  useEffect(() => {
+    if (!dragging) return;
 
-  const onBubbleUp = (item: PlottedItem) => (e: PointerEvent<SVGGElement>) => {
-    if (!drag || drag.issueId !== item.issue_id) return;
-    if (drag.moved) {
-      const { u, i } = clientToChart(e);
-      onPin(item.issue_id, Math.round(u * 10) / 10, Math.round(i * 10) / 10);
-    } else {
-      onSelect(selectedId === item.issue_id ? null : item.issue_id);
-    }
-    setDrag(null);
-  };
+    const endDrag = () => setDrag(null);
+
+    const onWindowMove = (e: globalThis.PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || e.pointerId !== current.pointerId) return;
+      const point = clientToChart(e);
+      if (!point) return;
+      const moved =
+        current.moved ||
+        Math.hypot(e.clientX - current.startX, e.clientY - current.startY) > DRAG_THRESHOLD_PX;
+      setDrag({ ...current, moved, u: point.u, i: point.i });
+    };
+
+    const onWindowUp = (e: globalThis.PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || e.pointerId !== current.pointerId) return;
+      if (current.moved) {
+        const point = clientToChart(e) ?? { u: current.u, i: current.i };
+        onPinRef.current(
+          current.issueId,
+          Math.round(point.u * 10) / 10,
+          Math.round(point.i * 10) / 10,
+        );
+      } else {
+        const selected = selectedIdRef.current;
+        onSelectRef.current(selected === current.issueId ? null : current.issueId);
+      }
+      endDrag();
+    };
+
+    const onWindowCancel = (e: globalThis.PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || e.pointerId !== current.pointerId) return;
+      endDrag();
+    };
+
+    window.addEventListener("pointermove", onWindowMove);
+    window.addEventListener("pointerup", onWindowUp);
+    window.addEventListener("pointercancel", onWindowCancel);
+    window.addEventListener("blur", endDrag);
+    return () => {
+      window.removeEventListener("pointermove", onWindowMove);
+      window.removeEventListener("pointerup", onWindowUp);
+      window.removeEventListener("pointercancel", onWindowCancel);
+      window.removeEventListener("blur", endDrag);
+    };
+  }, [dragging, clientToChart]);
 
   return (
     <div className="rounded-[14px] border border-(--color-border) bg-(--color-surface) p-3 shadow-(--shadow-card)">
@@ -203,9 +260,6 @@ export function MatrixChart({
               aria-label={`Issue #${item.number}: ${item.title}`}
               aria-pressed={isSelected}
               onPointerDown={onBubbleDown(item)}
-              onPointerMove={onBubbleMove}
-              onPointerUp={onBubbleUp(item)}
-              onPointerCancel={() => setDrag(null)}
               onPointerEnter={() => onHover(item, cx, cy)}
               onPointerLeave={() => onHover(null, 0, 0)}
               onKeyDown={(e) => {
