@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -72,7 +73,12 @@ export function MatrixChart({
   const onPinRef = useRef(onPin);
   const onSelectRef = useRef(onSelect);
   const selectedIdRef = useRef(selectedId);
-  useEffect(() => {
+  // useLayoutEffect (not useEffect): this must flush synchronously right
+  // after commit, before paint. A passive useEffect is deferred until after
+  // paint, which widens the window between a threshold-crossing pointermove
+  // (setDrag) and a fast-following pointerup enough for onWindowUp to read a
+  // stale dragRef.current.moved === false and drop the pin as a click instead.
+  useLayoutEffect(() => {
     dragRef.current = drag;
     onPinRef.current = onPin;
     onSelectRef.current = onSelect;
