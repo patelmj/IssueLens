@@ -32,6 +32,30 @@ const READINESS_THRESHOLDS = [
   { value: "25", label: "Readiness < 25%" },
 ];
 
+/**
+ * A hand-typed URL like `?max_readiness=80` applies correctly server-side (see
+ * plan-client.tsx) but matches none of the presets above, so the <select> would
+ * otherwise render blank and silently hide an active filter (#28).
+ *
+ * When the current value isn't a preset, we surface it as an extra option instead
+ * of snapping it to the nearest preset — snapping would misreport the filter that's
+ * actually applied, which is worse than showing nothing.
+ *
+ * Junk input handling: a non-numeric value, or one outside the meaningful 1-100
+ * readiness-percentage range, is treated as unrepresentable and dropped rather than
+ * turned into an absurd option (e.g. "Readiness < -5%" or "Readiness < abc%"). In
+ * that case the select falls back to its prior blank-on-unmatched-value behavior;
+ * it never crashes.
+ */
+function customReadinessOption(value: string | null) {
+  if (!value) return null;
+  if (READINESS_THRESHOLDS.some((t) => t.value === value)) return null;
+  if (!/^\d{1,3}$/.test(value)) return null;
+  const n = Number(value);
+  if (n <= 0 || n > 100) return null;
+  return { value, label: `Readiness < ${n}%` };
+}
+
 export function Toolbar({
   params,
   visible,
@@ -57,6 +81,19 @@ export function Toolbar({
         `/api/backend/issues/facets${repoId ? `?repo_id=${repoId}` : ""}`,
       ),
   });
+
+  const customReadiness = customReadinessOption(maxReadiness ?? null);
+  const readinessOptions = customReadiness
+    ? (() => {
+        const numeric = Number(customReadiness.value);
+        const insertAt = READINESS_THRESHOLDS.findIndex(
+          (t) => t.value !== "" && Number(t.value) < numeric,
+        );
+        const combined = [...READINESS_THRESHOLDS];
+        combined.splice(insertAt === -1 ? combined.length : insertAt, 0, customReadiness);
+        return combined;
+      })()
+    : READINESS_THRESHOLDS;
 
   const [searchText, setSearchText] = useState(q ?? "");
   const [prevQ, setPrevQ] = useState(q);
@@ -191,7 +228,7 @@ export function Toolbar({
           setParams({ max_readiness: e.target.value || null, offset: null })
         }
       >
-        {READINESS_THRESHOLDS.map((t) => (
+        {readinessOptions.map((t) => (
           <option key={t.value} value={t.value}>
             {t.label}
           </option>
