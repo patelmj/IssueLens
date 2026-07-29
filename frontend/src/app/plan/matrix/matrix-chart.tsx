@@ -69,13 +69,15 @@ export function MatrixChart({
   const popStep = Math.min(70, 1400 / Math.max(plotted.length - 1, 1));
 
   const dragRef = useRef<DragState | null>(null);
-  dragRef.current = drag;
   const onPinRef = useRef(onPin);
-  onPinRef.current = onPin;
   const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
   const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId;
+  useEffect(() => {
+    dragRef.current = drag;
+    onPinRef.current = onPin;
+    onSelectRef.current = onSelect;
+    selectedIdRef.current = selectedId;
+  });
 
   const clientToChart = useCallback(
     (point: { clientX: number; clientY: number }): { u: number; i: number } | null => {
