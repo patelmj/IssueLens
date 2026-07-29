@@ -26,7 +26,7 @@ services:
       retries: 10
 
   ollama:
-    image: ollama/ollama
+    image: ollama/ollama:0.18.1
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
@@ -60,6 +60,10 @@ services:
     environment:
       ISSUELENS_DATABASE_URL: postgresql+asyncpg://issuelens:issuelens@postgres:5432/issuelens
       ISSUELENS_REDIS_URL: redis://redis:6379/0
+      # The triage regenerate-section endpoint calls Ollama in-process, not via the
+      # worker, so the API needs this too — without it the default localhost:11434
+      # resolves to the backend container itself and the request 500s.
+      ISSUELENS_OLLAMA_URL: http://ollama:11434
       # Forwarded from repo-root .env (compose does not inject .env into containers by itself)
       ISSUELENS_GITHUB_APP_ID: ${ISSUELENS_GITHUB_APP_ID:-}
       ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64: ${ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64:-}

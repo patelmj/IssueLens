@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { emptyStats } from "./fixtures/overview-stats";
 
 const baseRepo = {
   private: false,
@@ -42,11 +43,11 @@ test("hiding a repo mutes the card and removes it from other views", async ({ pa
     ].filter((r) => !state.hiddenIds.has(r.id));
     return route.fulfill({
       json: {
+        ...emptyStats,
         connected_repos: visible.length,
         open_issues: visible.reduce((sum, r) => sum + r.open_issues_count, 0),
-        last_synced_at: null,
-        top_repos: [],
-        activity: [],
+        top_repos: visible,
+        sync: { ...emptyStats.sync, visible_repos: visible.length },
       },
     });
   });
@@ -68,12 +69,12 @@ test("hiding a repo mutes the card and removes it from other views", async ({ pa
     "patelmj/IssueLens",
   ]);
 
-  // the overview's connected-repos count reflects the reduced visible set
-  // (only repo 500 remains visible after hiding 501)
+  // the overview's connected-repos count (now surfaced on the sync-health card)
+  // reflects the reduced visible set — only repo 500 remains visible after hiding 501
   await page.goto("/");
-  await expect(
-    page.getByText("Connected repos").locator("xpath=following-sibling::div[1]"),
-  ).toHaveText("1");
+  await expect(page.getByTestId("sync-health")).toContainText(
+    "1 repositories connected",
+  );
 });
 
 test("showing a hidden repo restores it", async ({ page }) => {

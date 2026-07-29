@@ -194,10 +194,8 @@ async def expire_stuck_sync_jobs(ctx: dict) -> int:
                 )
             ).scalars()
         )
+        message = f"expired: stuck in running for over {STUCK_JOB_THRESHOLD_MINUTES} minutes"
         for job in stuck:
-            message = (
-                f"expired: stuck in running for over {STUCK_JOB_THRESHOLD_MINUTES} minutes"
-            )
             job.status = "error"
             job.error = message
             job.finished_at = now

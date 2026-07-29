@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.llm.priority import compute_signal_scores, estimate_from, priority_label
 
@@ -178,3 +178,27 @@ def test_milestone_due_near_and_far_tiers():
 def test_milestone_without_due_date_keeps_flat_bonus():
     result = compute_signal_scores(**base_kwargs(milestone_title="v2.0"))
     assert result.urgency == 42  # 30 + 12
+
+
+def test_milestone_due_in_a_few_hours_lands_in_due_soon_tier():
+    result = compute_signal_scores(
+        **base_kwargs(
+            milestone_title="v2.0",
+            milestone_due_on=NOW + timedelta(hours=2),  # (due_on - now).days == 0
+        )
+    )
+    # urgency: 30 + 20 (due within 7 days)
+    assert result.urgency == 50
+    assert any("due in 0 days" in f["text"] for f in result.factors)
+
+
+def test_milestone_due_a_few_hours_ago_lands_in_overdue_tier():
+    result = compute_signal_scores(
+        **base_kwargs(
+            milestone_title="v2.0",
+            milestone_due_on=NOW - timedelta(hours=2),  # (due_on - now).days == -1
+        )
+    )
+    # urgency: 30 + 25 (overdue)
+    assert result.urgency == 55
+    assert any("overdue by 1 day" in f["text"] for f in result.factors)

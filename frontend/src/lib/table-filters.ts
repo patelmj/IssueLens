@@ -15,7 +15,6 @@ export type TableSort = (typeof TABLE_SORTS)[number];
 
 /** Values offered by the table toolbar; anything else is dropped on parse. */
 export const TABLE_TYPES = ["bug", "feature", "debt", "question", "docs"] as const;
-export const TABLE_READINESS_THRESHOLDS = ["90", "75", "50", "25"] as const;
 
 export type TableViewFilters = {
   state: TableState;
@@ -61,6 +60,21 @@ function memberOrNull(value: unknown, allowed: readonly string[]): string | null
   return typeof value === "string" && allowed.includes(value) ? value : null;
 }
 
+/**
+ * Readiness-percentage sanitizer: accepts any integer 0-100 inclusive, not just the
+ * toolbar's preset thresholds — a hand-typed `?max_readiness=80` is a valid backend
+ * query (`ge=0, le=100` in issues.py) and must survive the saved-view round-trip.
+ * Canonicalizes to a plain decimal string (no leading zeros) so "050" and "50" collapse
+ * to the same value and always produce the same query string. Anything else
+ * (non-numeric, negative, >100, non-integer) is dropped to null, same as an unrecognized
+ * preset used to be.
+ */
+export function percentOrNull(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{1,3}$/.test(value)) return null;
+  const n = Number(value);
+  return n >= 0 && n <= 100 ? String(n) : null;
+}
+
 /** Unknown or malformed values fall back to defaults — never a crash. */
 export function parseTableFilters(params: ParamSource): TableViewFilters {
   return {
@@ -70,10 +84,7 @@ export function parseTableFilters(params: ParamSource): TableViewFilters {
     q: cleanString(params.get("q")),
     type: memberOrNull(params.get("type"), TABLE_TYPES),
     component: cleanString(params.get("component")),
-    max_readiness: memberOrNull(
-      params.get("max_readiness"),
-      TABLE_READINESS_THRESHOLDS,
-    ),
+    max_readiness: percentOrNull(params.get("max_readiness")),
     sort: oneOf(params.get("sort"), TABLE_SORTS, "updated"),
     order: oneOf(params.get("order"), ["asc", "desc"] as const, "desc"),
   };
@@ -111,7 +122,7 @@ export function tableFiltersFromJson(value: unknown): TableViewFilters {
     q: cleanString(obj.q),
     type: memberOrNull(obj.type, TABLE_TYPES),
     component: cleanString(obj.component),
-    max_readiness: memberOrNull(obj.max_readiness, TABLE_READINESS_THRESHOLDS),
+    max_readiness: percentOrNull(obj.max_readiness),
     sort: oneOf(obj.sort, TABLE_SORTS, "updated"),
     order: oneOf(obj.order, ["asc", "desc"] as const, "desc"),
   };

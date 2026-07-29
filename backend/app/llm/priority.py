@@ -69,6 +69,10 @@ def _factor(axis: str, sign: str, text: str, weight: int) -> dict:
     return {"axis": axis, "sign": sign, "text": text, "source": "signal", "weight": weight}
 
 
+def _pluralize_days(count: int) -> str:
+    return "1 day" if count == 1 else f"{count} days"
+
+
 def _label_names(labels: list[dict]) -> set[str]:
     return {str(lb.get("name", "")).lower() for lb in labels}
 
@@ -129,16 +133,16 @@ def compute_signal_scores(
             days_until_due = (milestone_due_on - now).days
             if days_until_due < 0:
                 weight = MILESTONE_OVERDUE_URGENCY
-                text = f"Milestone {milestone_title} overdue by {-days_until_due} days"
+                text = f"Milestone {milestone_title} overdue by {_pluralize_days(-days_until_due)}"
             elif days_until_due <= MILESTONE_DUE_SOON_DAYS:
                 weight = MILESTONE_DUE_SOON_URGENCY
-                text = f"Milestone {milestone_title} due in {days_until_due} days"
+                text = f"Milestone {milestone_title} due in {_pluralize_days(days_until_due)}"
             elif days_until_due <= MILESTONE_DUE_NEAR_DAYS:
                 weight = MILESTONE_DUE_NEAR_URGENCY
-                text = f"Milestone {milestone_title} due in {days_until_due} days"
+                text = f"Milestone {milestone_title} due in {_pluralize_days(days_until_due)}"
             else:
                 weight = MILESTONE_DUE_FAR_URGENCY
-                text = f"Milestone {milestone_title} due in {days_until_due} days"
+                text = f"Milestone {milestone_title} due in {_pluralize_days(days_until_due)}"
             urgency += weight
             factors.append(_factor("urgency", "+", text, weight))
         else:
