@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { waitForHydration } from "./helpers/hydration";
 
 const COLUMN_KEYS = [
   "needs_detail", "ready", "in_progress", "review", "blocked", "done",
@@ -139,6 +140,7 @@ test("card menu moves and resets placement", async ({ page }) => {
 test("lane-by component groups cards into swimlanes with fallback last", async ({ page }) => {
   await stubBoard(page);
   await page.goto("/plan/board");
+  await waitForHydration(page, "lane-by");
   await page.getByTestId("lane-by").getByRole("button", { name: "Component" }).click();
   const lanes = page.getByTestId(/^swimlane-/);
   await expect(lanes).toHaveCount(2);
