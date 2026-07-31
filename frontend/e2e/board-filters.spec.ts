@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { waitForHydration } from "./helpers/hydration";
 
 const card = (over: Partial<Record<string, unknown>> = {}) => ({
   issue_id: 1,
@@ -83,6 +84,7 @@ test("type chip filters cards and shows the shown-count", async ({ page }) => {
 test("lane_by round-trips through the URL", async ({ page }) => {
   await stubBoard(page);
   await page.goto("/plan/board?repo_id=500");
+  await waitForHydration(page, "lane-by");
   await page.getByTestId("lane-by").getByRole("button", { name: "Assignee" }).click();
   await expect(page).toHaveURL(/lane_by=assignee/);
   await expect(page.getByTestId("swimlane-alice")).toBeVisible();
@@ -104,6 +106,7 @@ test("save is disabled at defaults, posts board snapshot when active", async ({
 
   await page.goto("/plan/board?repo_id=500&types=bug&lane_by=assignee");
   await expect(page.getByTestId("save-view")).toBeEnabled();
+  await waitForHydration(page, "save-view");
   await page.getByTestId("save-view").click();
   await page.getByTestId("save-view-name").fill("Bug lanes");
   await page.getByTestId("save-view-submit").click();

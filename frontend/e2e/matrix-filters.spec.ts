@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { waitForHydration } from "./helpers/hydration";
 
 const item = (over: Partial<Record<string, unknown>> = {}) => ({
   issue_id: 1,
@@ -69,6 +70,7 @@ test("type chip filters chart and queue together", async ({ page }) => {
 test("unclassified type bucket matches null issue_type", async ({ page }) => {
   await stubMatrix(page);
   await page.goto("/plan/matrix");
+  await waitForHydration(page, "type-chip");
   await page.getByTestId("type-chip").click();
   await page
     .getByTestId("type-panel")
@@ -83,6 +85,7 @@ test("readiness buckets filter by score ranges and unscored", async ({ page }) =
   await stubMatrix(page);
   await page.goto("/plan/matrix");
 
+  await waitForHydration(page, "readiness-chip");
   await page.getByTestId("readiness-chip").click();
   await page.getByTestId("readiness-ready").click();
   await expect(page.getByTestId("bubble-42")).toBeVisible();
@@ -130,6 +133,7 @@ test("clear-filters chip resets all filters", async ({ page }) => {
   await stubMatrix(page);
   await page.goto("/plan/matrix?repo_id=500&types=bug&readiness=ready");
   await expect(page.getByTestId("clear-filters")).toBeVisible();
+  await waitForHydration(page, "clear-filters");
   await page.getByTestId("clear-filters").click();
   await expect(page.getByTestId("bubble-43")).toBeVisible();
   await expect(page).not.toHaveURL(/types=|readiness=/);
@@ -152,6 +156,7 @@ test("chips stay legible after theme toggle", async ({ page }) => {
 test("rapid cross-panel selection composes both filters", async ({ page }) => {
   await stubMatrix(page);
   await page.goto("/plan/matrix");
+  await waitForHydration(page, "type-chip");
   await page.getByTestId("type-chip").click();
   await page.getByTestId("type-panel").getByRole("checkbox", { name: "Bug" }).check();
   // immediately switch panels and pick a bucket — no waiting for the URL

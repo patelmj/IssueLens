@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { waitForHydration } from "./helpers/hydration";
 
 async function stubTable(page: Page, posts: unknown[] = []) {
   await page.route(/\/api\/backend\/repositories$/, (route: Route) =>
@@ -46,6 +47,7 @@ test("saving posts the full table snapshot including sort", async ({ page }) => 
   await page.goto(
     "/plan?repo_id=500&type=bug&max_readiness=50&sort=readiness&order=asc",
   );
+  await waitForHydration(page, "save-view");
   await page.getByTestId("save-view").click();
   await page.getByTestId("save-view-name").fill("Readiness gaps");
   await page.getByTestId("save-view-submit").click();

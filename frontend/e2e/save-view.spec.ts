@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { waitForHydration } from "./helpers/hydration";
 
 const item = (over: Partial<Record<string, unknown>> = {}) => ({
   issue_id: 1,
@@ -65,6 +66,7 @@ test("save view is disabled without filters, posts snapshot with filters", async
 
   await page.goto("/plan/matrix?repo_id=500&types=bug&readiness=ready");
   await expect(page.getByTestId("save-view")).toBeEnabled();
+  await waitForHydration(page, "save-view");
   await page.getByTestId("save-view").click();
   await page.getByTestId("save-view-name").fill("Ready bugs");
   await page.getByTestId("save-view-submit").click();
@@ -82,6 +84,7 @@ test("save view is disabled without filters, posts snapshot with filters", async
 test("duplicate name shows the API error inline", async ({ page }) => {
   await stubMatrix(page, [], 409);
   await page.goto("/plan/matrix?repo_id=500&types=bug");
+  await waitForHydration(page, "save-view");
   await page.getByTestId("save-view").click();
   await page.getByTestId("save-view-name").fill("Ready bugs");
   await page.getByTestId("save-view-submit").click();
@@ -93,6 +96,7 @@ test("saved view appears in the sidebar after saving", async ({ page }) => {
   const posts: unknown[] = [];
   await stubMatrix(page, posts);
   await page.goto("/plan/matrix?repo_id=500&types=bug");
+  await waitForHydration(page, "save-view");
   await page.getByTestId("save-view").click();
   await page.getByTestId("save-view-name").fill("Ready bugs");
   await page.getByTestId("save-view-submit").click();
@@ -103,6 +107,7 @@ test("popover dismisses on Escape and outside click without saving", async ({ pa
   const posts: unknown[] = [];
   await stubMatrix(page, posts);
   await page.goto("/plan/matrix?repo_id=500&types=bug");
+  await waitForHydration(page, "save-view");
   await page.getByTestId("save-view").click();
   await expect(page.getByTestId("save-view-popover")).toBeVisible();
   await page.keyboard.press("Escape");
