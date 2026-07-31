@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 // (i1..i5) with gh_closed_at spread across 2026-04-15 and 2026-07-19..07-21,
 // none of them carrying priority data — so window=all is always non-empty and
 // repo_id=999 (a repository that doesn't exist) is a real, always-empty scope.
-// Verified directly against http://localhost:8000/analytics/completed before
+// Verified directly against http://localhost:8005/analytics/completed before
 // writing these assertions.
 
 test("analyze page renders all modules", async ({ page }) => {

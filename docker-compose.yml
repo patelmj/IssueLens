@@ -68,7 +68,12 @@ services:
       ISSUELENS_GITHUB_APP_ID: ${ISSUELENS_GITHUB_APP_ID:-}
       ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64: ${ISSUELENS_GITHUB_APP_PRIVATE_KEY_B64:-}
     ports:
-      - "127.0.0.1:8000:8000"
+      # Host port 8005 (not 8000): the mehova project publishes its backend on
+      # 8000, and a collision aborts `compose up` with "port is already
+      # allocated". Only the host mapping moves — the frontend container still
+      # reaches the API at http://backend:8000 over the compose network.
+      # From the host, use http://localhost:8005.
+      - "127.0.0.1:8005:8000"
     volumes:
       - ./backend/app:/app/app
     depends_on:

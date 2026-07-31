@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+// Fallback is the host-published port (8005, remapped off 8000 to clear mehova);
+// under compose, BACKEND_URL is set to http://backend:8000 and wins.
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8005";
 
 async function proxy(
   req: NextRequest,
