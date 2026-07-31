@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -183,6 +184,14 @@ async def regenerate_section(
         raise HTTPException(status_code=404, detail="No such section")
     except service.SuggestionConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    except (httpx.ConnectError, httpx.TimeoutException):
+        # An unreachable or hung drafting model is an upstream failure, not a
+        # bug in this request — mirror the push endpoint's 502 rather than
+        # letting it surface as a bare 500.
+        raise HTTPException(
+            status_code=502,
+            detail="Could not reach the drafting model. Check that Ollama is running.",
+        )
     return _to_out(sug)
 
 

@@ -111,6 +111,7 @@ When explaining research papers, use this format:
 ## Testing
 
 - All UI testing must be done using **Playwright CLI** (not manual browser testing)
+- **After editing frontend app source, `docker compose restart frontend` before running e2e.** The containerised dev server does not reliably pick up host edits through the Windows bind mount — the source inside the container is current (`docker compose exec frontend grep …` proves it) while the dev server keeps serving the previously compiled module. The failure looks exactly like a broken implementation: new `data-testid`s "not found", new handlers apparently doing nothing. **If a brand-new element is missing from the Playwright error-context snapshot, restart the container before debugging the component** — twice in one session that was a stale compile, not a bug.
 - **Stopping a background `npm run dev` task on Windows orphans the node child** — the shell dies but the dev server keeps listening on :3005 and degrades over time (pages ~1.6s, proxy ~4s vs 25ms/11ms healthy). After stopping dev-server work, verify no listener remains (`netstat -ano | findstr :3005`) and `Stop-Process` the node PID if one does. A degraded orphan also breaks later e2e runs the same way a stale `issuelens-frontend-1` container does.
 
 ## Git Workflow
