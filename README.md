@@ -16,7 +16,7 @@ Prerequisites:
 - **[uv](https://docs.astral.sh/uv/)** — only for running backend tests on the host
 
 ```sh
-docker compose up --build        # postgres+pgvector, redis, ollama, backend :8000, worker, frontend :3005
+docker compose up --build        # postgres+pgvector, redis, ollama, backend :8005, worker, frontend :3005
 ```
 
 Migrations run automatically on every `docker compose up`: the one-shot `migrate`
@@ -30,7 +30,7 @@ On machines without the NVIDIA container runtime, `docker compose up` fails on t
 service in `docker-compose.yml` and it runs on CPU instead.
 
 - Dashboard: http://localhost:3005
-- API health: http://localhost:8000/healthz
+- API health: http://localhost:8005/healthz
 
 ## GitHub App setup (one-time)
 
