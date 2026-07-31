@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -89,6 +89,51 @@ export function SuggestionDrawer({
     qc.invalidateQueries({ queryKey: ["triage-inbox"] });
   };
 
+  const [saved, setSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // triage-client hands us a fresh onClose every render; hold it in a ref so the
+  // Escape listener below subscribes once instead of on every re-render.
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Inner dismissables (section editor, steer popover) claim Escape by
+      // calling preventDefault — see the note on their handlers.
+      if (e.key === "Escape" && !e.defaultPrevented) onCloseRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
+
+  const confirmSaved = () => {
+    setSaved(true);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 2500);
+  };
+
+  const closeButton = (
+    <button
+      type="button"
+      className="ml-auto rounded-md px-1.5 text-base leading-none text-(--color-text-muted) transition-all duration-150 hover:text-(--color-text)"
+      onClick={onClose}
+      aria-label="Close suggestion"
+      data-testid="drawer-close"
+    >
+      ×
+    </button>
+  );
+
   const { data, error, isPending } = useQuery({
     queryKey: ["suggestion", issueId],
     queryFn: () =>
@@ -106,7 +151,10 @@ export function SuggestionDrawer({
       sendJson<Suggestion>(`${base}/${issueId}/suggestion`, "PATCH", { status }),
     onSuccess: (data, status) => {
       applyResult(data);
-      if (status === "rejected") onClose();
+      // Rejecting resolves the item; saving keeps the drawer open for more
+      // editing, so it needs its own confirmation instead of silence.
+      if (status === "rejected") onCloseRef.current();
+      else confirmSaved();
     },
   });
   const regenerateAll = useMutation({
@@ -116,19 +164,30 @@ export function SuggestionDrawer({
   const push = useMutation({
     mutationFn: () =>
       sendJson<Suggestion>(`${base}/${issueId}/suggestion/push`, "POST"),
-    onSuccess: applyResult,
+    // A pushed issue is resolved — close out and let the inbox row carry the
+    // new status.
+    onSuccess: (data) => {
+      applyResult(data);
+      onCloseRef.current();
+    },
   });
 
   if (isPending)
-    return <div className="text-(--color-text-muted)">Preparing suggestion…</div>;
+    return (
+      <div className="flex items-center gap-2 text-(--color-text-muted)">
+        Preparing suggestion… {closeButton}
+      </div>
+    );
   if (error || !data)
     return (
-      <div className="text-(--color-text-muted)">
-        Could not prepare a suggestion for this issue.
+      <div className="flex items-center gap-2 text-(--color-text-muted)">
+        Could not prepare a suggestion for this issue. {closeButton}
       </div>
     );
 
-  const pushError = push.error as Error | null;
+  const actionError = (push.error ??
+    regenerateAll.error ??
+    setStatus.error) as Error | null;
   const locked = data.status === "pushed";
   const visibleSections = data.sections.filter((s) => !s.removed);
   const removedSections = data.sections.filter((s) => s.removed);
@@ -147,6 +206,16 @@ export function SuggestionDrawer({
             drafting answers…
           </span>
         ) : null}
+        {saved ? (
+          <span
+            className="text-[11px] font-normal text-(--color-primary)"
+            data-testid="saved-confirmation"
+            role="status"
+          >
+            saved as suggestion
+          </span>
+        ) : null}
+        {closeButton}
       </div>
 
       <div
@@ -216,9 +285,9 @@ export function SuggestionDrawer({
         </div>
       ) : null}
 
-      {pushError ? (
-        <div className="text-(--type-bug)" data-testid="push-error">
-          {pushError.message}
+      {actionError ? (
+        <div className="text-(--type-bug)" data-testid="drawer-error">
+          {actionError.message}
         </div>
       ) : null}
 
@@ -260,6 +329,14 @@ export function SuggestionDrawer({
           }}
         >
           Regenerate all
+        </button>
+        <button
+          type="button"
+          className={`${btn} ml-auto`}
+          onClick={onClose}
+          data-testid="drawer-done"
+        >
+          Done
         </button>
       </div>
     </div>
@@ -313,6 +390,9 @@ function SectionBlock({
 
   const act =
     "text-[11px] text-(--color-text-muted) transition-all duration-150 hover:text-(--color-primary)";
+  // Section mutations used to fail silently — a dead Regenerate button with no
+  // explanation when Ollama is unreachable.
+  const sectionError = (regenerate.error ?? patch.error) as Error | null;
 
   return (
     <div
@@ -351,6 +431,17 @@ function SectionBlock({
             className="min-h-24 rounded-lg border border-(--color-border) bg-(--color-surface) p-2 font-mono text-[12px]"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            // Escape cancels this editor rather than closing the whole drawer.
+            // preventDefault is what does the work: the App Router hydrates on
+            // `document`, so React's delegated listener and the drawer's own
+            // Escape listener sit on the same node and stopPropagation cannot
+            // reach across to a sibling listener.
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setEditing(false);
+              }
+            }}
             data-testid={`section-editor-${section.requirement_id}`}
           />
           <div className="flex gap-2">
@@ -365,6 +456,15 @@ function SectionBlock({
       ) : (
         <Markdown>{section.body_md}</Markdown>
       )}
+
+      {sectionError ? (
+        <div
+          className="mt-1 text-[11px] text-(--type-bug)"
+          data-testid={`section-error-${section.requirement_id}`}
+        >
+          {sectionError.message}
+        </div>
+      ) : null}
 
       {!locked && !editing ? (
         <div className="mt-1 flex gap-3 opacity-0 transition-all duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
@@ -409,6 +509,13 @@ function SectionBlock({
       {steering ? (
         <div
           className="mt-2 flex flex-col gap-2 rounded-lg border border-(--color-border) bg-(--color-surface) p-2 shadow-md"
+          // Escape dismisses the steer popover rather than the whole drawer.
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setSteering(false);
+            }
+          }}
           data-testid={`steer-popover-${section.requirement_id}`}
         >
           <div className="text-[10px] font-semibold uppercase tracking-wider text-(--color-text-muted)">

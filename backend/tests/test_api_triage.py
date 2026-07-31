@@ -437,3 +437,38 @@ async def test_patch_unknown_section_404(clean_db, api):
     await api.post("/issues/1/suggestion")
     resp = await api.patch("/issues/1/suggestion/sections/nope", json={"removed": True})
     assert resp.status_code == 404
+
+
+@respx.mock
+async def test_regenerate_502_when_ollama_unreachable(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    respx.post("http://127.0.0.1:11434/api/chat").mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+
+    resp = await api.post(
+        "/issues/1/suggestion/sections/repro_steps/regenerate", json={"steer": None}
+    )
+    assert resp.status_code == 502
+    assert "Ollama" in resp.json()["detail"]
+
+
+@respx.mock
+async def test_regenerate_502_when_ollama_times_out(clean_db, api):
+    await seed_issues()
+    await seed_classifications()
+    await seed_readiness()
+    await api.post("/issues/1/suggestion")
+
+    respx.post("http://127.0.0.1:11434/api/chat").mock(
+        side_effect=httpx.ReadTimeout("timed out")
+    )
+
+    resp = await api.post(
+        "/issues/1/suggestion/sections/repro_steps/regenerate", json={"steer": None}
+    )
+    assert resp.status_code == 502
