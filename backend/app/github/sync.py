@@ -7,7 +7,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.github.client import app_get, installation_get_paginated
+from app.github.client import app_get_paginated, installation_get_paginated
 from app.models import Installation, Issue, Repository, SyncJob
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ def _parse_ts(value: str | None) -> datetime | None:
 
 
 async def refresh_installations(session: AsyncSession, client: httpx.AsyncClient) -> int:
-    installations = await app_get(client, "/app/installations")
+    installations = await app_get_paginated(client, "/app/installations")
     if not installations:
         # A successful-but-empty response (App uninstalled everywhere, suspension, or a
         # transient GitHub anomaly) must not silently wipe local data: skip the prune.

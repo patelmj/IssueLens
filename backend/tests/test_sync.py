@@ -139,6 +139,66 @@ async def test_refresh_empty_list_skips_prune(app_creds, clean_db):  # noqa: F81
 
 
 @respx.mock
+async def test_refresh_keeps_installation_and_repo_returned_on_page_two(
+    app_creds, clean_db  # noqa: F811
+):
+    respx.post("https://api.github.com/app/installations/43/access_tokens").mock(
+        return_value=httpx.Response(
+            201, json={"token": "token-43", "expires_at": "2099-01-01T00:00:00Z"}
+        )
+    )
+    respx.post("https://api.github.com/app/installations/42/access_tokens").mock(
+        return_value=httpx.Response(
+            201, json={"token": "token-42", "expires_at": "2099-01-01T00:00:00Z"}
+        )
+    )
+    page2_url = "https://api.github.com/app/installations?page=2"
+    respx.get(page2_url).mock(
+        return_value=httpx.Response(
+            200, json=[{"id": 42, "account": {"login": "patelmj"}}]
+        )
+    )
+    respx.get("https://api.github.com/app/installations").mock(
+        return_value=httpx.Response(
+            200,
+            json=[{"id": 43, "account": {"login": "another-owner"}}],
+            headers={"Link": f'<{page2_url}>; rel="next"'},
+        )
+    )
+
+    def repositories_response(request: httpx.Request) -> httpx.Response:
+        if request.headers["authorization"] == "Bearer token-42":
+            return httpx.Response(
+                200,
+                json={
+                    "repositories": [
+                        {
+                            "id": 500,
+                            "full_name": "patelmj/IssueLens",
+                            "name": "IssueLens",
+                            "private": True,
+                            "owner": {"login": "patelmj"},
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"repositories": []})
+
+    respx.get("https://api.github.com/installation/repositories").mock(
+        side_effect=repositories_response
+    )
+    async with get_sessionmaker()() as session:
+        await seed(session)
+        async with make_http_client() as client:
+            count = await refresh_installations(session, client)
+        assert count == 1
+        installations = list((await session.execute(select(Installation))).scalars())
+        assert sorted(installation.id for installation in installations) == [42, 43]
+        repos = list((await session.execute(select(Repository))).scalars())
+        assert [repo.id for repo in repos] == [500]
+
+
+@respx.mock
 async def test_sync_error_path(app_creds, clean_db):  # noqa: F811
     _token_route()
     respx.get("https://api.github.com/repos/patelmj/IssueLens/issues").mock(

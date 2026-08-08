@@ -4,6 +4,7 @@ import respx
 
 from app.github.client import (
     GitHubRateLimited,
+    app_get_paginated,
     installation_get_paginated,
     make_http_client,
 )
@@ -16,6 +17,26 @@ def _token_route():
             201, json={"token": "ghs_test", "expires_at": "2099-01-01T00:00:00Z"}
         )
     )
+
+
+@respx.mock
+async def test_app_pagination_follows_link_header(app_creds):  # noqa: F811
+    page2_url = "https://api.github.com/app/installations?page=2"
+    page2 = respx.get(page2_url).mock(
+        return_value=httpx.Response(200, json=[{"id": 2}])
+    )
+    page1 = respx.get("https://api.github.com/app/installations").mock(
+        return_value=httpx.Response(
+            200,
+            json=[{"id": 1}],
+            headers={"Link": f'<{page2_url}>; rel="next"'},
+        )
+    )
+    async with make_http_client() as client:
+        items = await app_get_paginated(client, "/app/installations")
+    assert [item["id"] for item in items] == [1, 2]
+    assert dict(page1.calls.last.request.url.params) == {"per_page": "100"}
+    assert page2.call_count == 1
 
 
 @respx.mock

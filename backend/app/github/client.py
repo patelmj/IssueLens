@@ -34,6 +34,29 @@ async def app_get(client: httpx.AsyncClient, path: str) -> Any:
     return resp.json()
 
 
+async def app_get_paginated(
+    client: httpx.AsyncClient,
+    path: str,
+    params: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    headers = {"Authorization": f"Bearer {make_app_jwt()}"}
+    items: list[dict[str, Any]] = []
+    url: str = path
+    first = True
+    while url:
+        resp = await client.get(
+            url,
+            params={"per_page": 100, **(params or {})} if first else None,
+            headers=headers,
+        )
+        _check_rate_limit(resp)
+        resp.raise_for_status()
+        items.extend(resp.json())
+        url = resp.links.get("next", {}).get("url", "")
+        first = False
+    return items
+
+
 async def installation_get_paginated(
     client: httpx.AsyncClient,
     installation_id: int,
