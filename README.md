@@ -30,7 +30,7 @@ Container Toolkit configured for Docker.
 Migrations run automatically on every `docker compose up`: the one-shot `migrate`
 service applies `alembic upgrade head` before the backend and worker start.
 
-The first classification run downloads the local LLM (`qwen3:8b`, ~5 GB) into the
+The first classification run downloads the local LLM (`qwen3:14b`, ~9 GB) into the
 `ollamadata` volume — watch progress with `docker compose logs -f ollama`. Issue
 type/component classification runs automatically after each repo sync.
 The base Compose file runs Ollama on CPU. Use the GPU command above when NVIDIA
