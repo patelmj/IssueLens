@@ -96,6 +96,7 @@ export function AnalyzeClient() {
             <button
               key={w}
               type="button"
+              aria-pressed={w === window}
               className={`rounded-[7px] px-2.5 py-0.5 text-[12px] transition-all duration-150 ${
                 w === window
                   ? "bg-(--accent-tint) font-semibold text-(--color-primary)"

@@ -20,9 +20,23 @@ test("analyze page renders all modules", async ({ page }) => {
 });
 
 test("window filter updates URL", async ({ page }) => {
+  await page.route(/\/api\/backend\/repositories$/, (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route(/\/api\/backend\/analytics\/completed\?/, (route) =>
+    route.fulfill({ json: { totals: { completed: 0 } } }),
+  );
   await page.goto("/analyze");
-  await page.getByTestId("window-filter").getByRole("button", { name: "30d" }).click();
+  const windowFilter = page.getByTestId("window-filter");
+  const thirtyDays = windowFilter.getByRole("button", { name: "30d" });
+  const ninetyDays = windowFilter.getByRole("button", { name: "90d" });
+  await expect(thirtyDays).toHaveAttribute("aria-pressed", "false");
+  await expect(ninetyDays).toHaveAttribute("aria-pressed", "true");
+
+  await thirtyDays.click();
   await expect(page).toHaveURL(/window=30d/);
+  await expect(thirtyDays).toHaveAttribute("aria-pressed", "true");
+  await expect(ninetyDays).toHaveAttribute("aria-pressed", "false");
 });
 
 test("info popover opens with metric copy", async ({ page }) => {

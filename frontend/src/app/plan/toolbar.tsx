@@ -148,6 +148,7 @@ export function Toolbar({
           <button
             key={value}
             type="button"
+            aria-pressed={state === value}
             onClick={() => setParams({ state: value === "open" ? null : value, offset: null })}
             className={`rounded-[7px] px-2.5 py-1 transition-all duration-150 ${
               state === value

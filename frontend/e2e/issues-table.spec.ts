@@ -100,8 +100,15 @@ test("toolbar filters round-trip to the API and the URL", async ({ page }) => {
   await page.goto("/plan");
   await expect(page.getByText("Fix token refresh")).toBeVisible();
 
-  await page.getByRole("button", { name: "Closed" }).click();
+  const openState = page.getByRole("button", { name: "Open", exact: true });
+  const closedState = page.getByRole("button", { name: "Closed", exact: true });
+  await expect(openState).toHaveAttribute("aria-pressed", "true");
+  await expect(closedState).toHaveAttribute("aria-pressed", "false");
+
+  await closedState.click();
   await expect(page).toHaveURL(/state=closed/);
+  await expect(openState).toHaveAttribute("aria-pressed", "false");
+  await expect(closedState).toHaveAttribute("aria-pressed", "true");
   await expect
     .poll(() => requested.some((u) => u.includes("state=closed")))
     .toBe(true);
