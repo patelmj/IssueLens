@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 import respx
@@ -38,8 +39,31 @@ async def test_gathers_comments_repo_card_and_references(clean_db, app_creds):  
     respx.post("https://api.github.com/app/installations/42/access_tokens").mock(
         return_value=Response(201, json={"token": "t", "expires_at": "2099-01-01T00:00:00Z"})
     )
-    respx.get("https://api.github.com/repos/o/r/issues/7/comments").mock(
-        return_value=Response(200, json=[{"body": "also see #12, only in Safari"}])
+    comments = respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "repository": {
+                        "issue": {
+                            "comments": {
+                                "nodes": [
+                                    {
+                                        "body": (
+                                            "comment 998 also see #12, only in Safari"
+                                        )
+                                    },
+                                    *[
+                                        {"body": f"comment {n}"}
+                                        for n in range(999, 1018)
+                                    ],
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+        )
     )
     respx.get("https://api.github.com/repos/o/r").mock(
         return_value=Response(200, json={"description": "auth service", "language": "Python"})
@@ -48,7 +72,18 @@ async def test_gathers_comments_repo_card_and_references(clean_db, app_creds):  
         issue, repo = await seed(session)
         async with make_http_client() as client:
             ctx = await gather_draft_context(session, client, issue, repo)
-    assert ctx["comments"] == ["also see #12, only in Safari"]
+    assert ctx["comments"] == [
+        "comment 998 also see #12, only in Safari",
+        *[f"comment {n}" for n in range(999, 1018)],
+    ]
+    request_body = json.loads(comments.calls.last.request.content)
+    assert request_body["variables"] == {
+        "owner": "o",
+        "name": "r",
+        "number": 7,
+        "last": 20,
+    }
+    assert "comments(last: $last)" in request_body["query"]
     assert ctx["repo_card"] == "o/r — auth service (primary language: Python)"
     assert ctx["references"] == ["#12: Session bug (closed)"]
 

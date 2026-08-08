@@ -4,7 +4,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.github.client import installation_get_one, installation_get_paginated
+from app.github.client import installation_get_one, installation_graphql
 from app.models import Issue, Repository
 
 logger = logging.getLogger(__name__)
@@ -14,23 +14,42 @@ MAX_REFERENCED_ISSUES = 10
 
 _REF_PATTERN = re.compile(r"#(\d+)")
 
+_COMMENTS_QUERY = """
+query RecentIssueComments($owner: String!, $name: String!, $number: Int!, $last: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      comments(last: $last) {
+        nodes { body }
+      }
+    }
+  }
+}
+"""
+
 
 async def _fetch_comments(gh_client, repo: Repository, issue: Issue) -> list[str]:
     if gh_client is None:
         return []
     try:
-        raw = await installation_get_paginated(
+        data = await installation_graphql(
             gh_client,
             repo.installation_id,
-            f"/repos/{repo.full_name}/issues/{issue.number}/comments",
+            _COMMENTS_QUERY,
+            {
+                "owner": repo.owner,
+                "name": repo.name,
+                "number": issue.number,
+                "last": MAX_COMMENTS,
+            },
         )
+        raw = data["repository"]["issue"]["comments"]["nodes"]
     except Exception:
         logger.warning(
             "comment fetch failed for %s#%s; drafting from mirror only",
             repo.full_name, issue.number, exc_info=True,
         )
         return []
-    return [c.get("body") or "" for c in raw[-MAX_COMMENTS:]]
+    return [c.get("body") or "" for c in raw]
 
 
 async def _fetch_repo_card(gh_client, repo: Repository) -> str:

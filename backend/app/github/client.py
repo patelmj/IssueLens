@@ -61,6 +61,25 @@ async def installation_get_paginated(
     return items
 
 
+async def installation_graphql(
+    client: httpx.AsyncClient,
+    installation_id: int,
+    query: str,
+    variables: dict[str, Any],
+) -> dict[str, Any]:
+    token = await get_installation_token(installation_id, client)
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.post(
+        "/graphql", json={"query": query, "variables": variables}, headers=headers
+    )
+    _check_rate_limit(resp)
+    resp.raise_for_status()
+    payload = resp.json()
+    if errors := payload.get("errors"):
+        raise RuntimeError(f"GitHub GraphQL request failed: {errors}")
+    return payload["data"]
+
+
 async def installation_get_one(
     client: httpx.AsyncClient, installation_id: int, path: str
 ) -> dict[str, Any]:
