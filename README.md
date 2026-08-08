@@ -16,8 +16,16 @@ Prerequisites:
 - **[uv](https://docs.astral.sh/uv/)** — only for running backend tests on the host
 
 ```sh
-docker compose up --build        # postgres+pgvector, redis, ollama, backend :8005, worker, frontend :3005
+# CPU-only (portable default)
+docker compose up --build
+
+# NVIDIA GPU acceleration
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
+
+Both commands start postgres+pgvector, Redis, Ollama, the API on port 8005, the
+worker, and the frontend on port 3005. The GPU variant requires the NVIDIA
+Container Toolkit configured for Docker.
 
 Migrations run automatically on every `docker compose up`: the one-shot `migrate`
 service applies `alembic upgrade head` before the backend and worker start.
@@ -25,9 +33,8 @@ service applies `alembic upgrade head` before the backend and worker start.
 The first classification run downloads the local LLM (`qwen3:8b`, ~5 GB) into the
 `ollamadata` volume — watch progress with `docker compose logs -f ollama`. Issue
 type/component classification runs automatically after each repo sync.
-On machines without the NVIDIA container runtime, `docker compose up` fails on the
-`ollama` service's GPU reservation — delete the `deploy:` block from the `ollama`
-service in `docker-compose.yml` and it runs on CPU instead.
+The base Compose file runs Ollama on CPU. Use the GPU command above when NVIDIA
+acceleration is available; no tracked configuration files need to be edited.
 
 - Dashboard: http://localhost:3005
 - API health: http://localhost:8005/healthz
